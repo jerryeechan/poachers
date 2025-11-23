@@ -1,10 +1,10 @@
 import {
-  Train, Trees, MoreHorizontal, Footprints, Mountain, Skull
+  Train, Trees, MoreHorizontal, Mountain, Skull, Search
 } from 'lucide-react';
 import { Recipe, TileConfig, TileTypeStr } from './types';
 
 export const GRID_SIZE = 8;
-export const MAX_ENERGY = 50;
+export const MAX_ENERGY = 20;
 export const MAX_HP = 20;
 export const MAX_TOOL_DURABILITY = 5;
 export const BASE_CAPACITY = 20;
@@ -17,13 +17,15 @@ export const GAME_CONFIG = {
     ENERGY_TIRED_PCT: 0.5,      // 50% Energy
   },
   ACTIONS: {
-    COST_BASE: 8,
+    COST_BASE: 5,
     COST_WINDY: 12,
     BOW_BONUS_DMG: 2,
+    SEARCH_COST_INITIAL: 5,
+    SEARCH_COST_INCREASE: -2,
   },
   TRAIN: {
-    PRESSURE_BASE: 100,
-    PRESSURE_PER_STATION: 50,
+    PRESSURE_BASE: 50,
+    PRESSURE_PER_STATION: 20,
     FUEL_GAIN_WOOD: 5,
     FUEL_GAIN_CHARCOAL: 15,
     DECAY_ON_REST: 10,
@@ -89,7 +91,7 @@ export const RECIPES: Record<string, Recipe> = {
 export const TILE_TYPES: Record<string, TileConfig> = {
   VOID: { id: 'void', icon: null, color: 'bg-transparent pointer-events-none' },
   TRACK: { id: 'track', icon: MoreHorizontal, color: 'bg-stone-900/50 text-stone-600 border-stone-800/30' },
-  EMPTY: { id: 'empty', icon: Footprints, color: 'bg-stone-800 text-stone-600 hover:border-stone-600' },
+  SEARCH: { id: 'search', icon: Search, color: 'bg-stone-800 text-stone-600 hover:border-stone-600' },
   TRAIN: { id: 'train', icon: Train, color: 'bg-amber-600 text-stone-900 shadow-[0_0_15px_rgba(245,158,11,0.4)] ring-2 ring-amber-500/50' },
   TREE: { id: 'tree', icon: Trees, color: 'bg-emerald-900 text-emerald-400 border-emerald-800 hover:border-emerald-500', tool: 'axe' },
   ROCK: { id: 'rock', icon: Mountain, color: 'bg-slate-700 text-slate-300 border-slate-600 hover:border-slate-400', tool: 'pickaxe' },
@@ -98,5 +100,5 @@ export const TILE_TYPES: Record<string, TileConfig> = {
 
 export const getTileConfig = (type: TileTypeStr): TileConfig => {
   const key = type.toUpperCase();
-  return TILE_TYPES[key] || TILE_TYPES.EMPTY;
+  return TILE_TYPES[key] || TILE_TYPES.SEARCH;
 };

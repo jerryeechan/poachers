@@ -11,7 +11,7 @@ const isLightSource = (tile: TileType | undefined): boolean => {
   if (!tile || !tile.revealed) return false;
   // Void, Track, Train are always transparent. 
   // Other types are only transparent if cleared (which usually converts them to 'empty', but checking cleared is safer)
-  return tile.type === 'void' || tile.type === 'track' || tile.type === 'train' || tile.type === 'empty' || tile.cleared;
+  return tile.type === 'void' || tile.type === 'track' || tile.type === 'train' || tile.type === 'search' || tile.cleared;
 };
 
 /**
@@ -84,7 +84,7 @@ export const generateLevel = (station: number): TileType[] => {
 
   for (let y = 0; y < GRID_SIZE; y++) {
     for (let x = 0; x < GRID_SIZE; x++) {
-      let type: any = 'empty';
+      let type: any = 'search';
       let revealed = false;
       let cleared = false;
       let scavengeLeft = 0;
@@ -122,9 +122,9 @@ export const generateLevel = (station: number): TileType[] => {
             type = 'rock';
           } else if (rand < (probs.ENEMY_BASE + (station * probs.ENEMY_SCALE))) {
             type = 'enemy';
-            attack = Math.floor(Math.random() * GAME_CONFIG.MAP.ENEMIES.ATTACK_VAR) + 
-                     GAME_CONFIG.MAP.ENEMIES.ATTACK_MIN + 
-                     Math.floor(station * GAME_CONFIG.MAP.ENEMIES.ATTACK_STATION_MULT);
+            attack = Math.floor(Math.random() * GAME_CONFIG.MAP.ENEMIES.ATTACK_VAR) +
+              GAME_CONFIG.MAP.ENEMIES.ATTACK_MIN +
+              Math.floor(station * GAME_CONFIG.MAP.ENEMIES.ATTACK_STATION_MULT);
           } else {
             scavengeLeft = Math.floor(Math.random() * GAME_CONFIG.MAP.LOOT.SCAVENGE_VAR) + GAME_CONFIG.MAP.LOOT.SCAVENGE_MIN;
           }
@@ -139,34 +139,34 @@ export const generateLevel = (station: number): TileType[] => {
       });
     }
   }
-  
+
   // --- FORCE SAFE START ---
   // The tiles immediately adjacent to the train perpendicular to the track must be accessible
   const startAccessible = [
-    {x: centerX, y: centerY - 1},
-    {x: centerX, y: centerY + 1},
+    { x: centerX, y: centerY - 1 },
+    { x: centerX, y: centerY + 1 },
   ];
 
   startAccessible.forEach(pos => {
     const tile = newGrid.find(t => t.x === pos.x && t.y === pos.y);
     if (tile) {
-       tile.type = 'empty';
-       tile.scavengeLeft = Math.floor(Math.random() * 2) + 2; 
-       tile.cleared = true; // It's open ground
-       tile.revealed = true; // And we can see it
+      tile.type = 'search';
+      tile.scavengeLeft = Math.floor(Math.random() * 2) + 2;
+      tile.cleared = true; // It's open ground
+      tile.revealed = true; // And we can see it
     }
   });
 
   // Run initial reveal logic
   // 1. Reveal neighbors of the Train (Center)
   revealNeighbors(centerX, centerY, newGrid);
-  
+
   // 2. Reveal neighbors of the forced open tiles.
   // This ensures we see the first layer of trees/rocks around our starting clearing.
   // startAccessible.forEach(pos => {
   //     revealNeighbors(pos.x, pos.y, newGrid);
   // });
-  
+
   // Final pass to set peek status correctly based on the initial reveals
   updatePeekStatus(newGrid);
 

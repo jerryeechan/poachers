@@ -2,7 +2,7 @@ import { LucideIcon } from 'lucide-react';
 
 export type ResourceType = 'wood' | 'stone' | 'charcoal';
 export type ToolType = 'axe' | 'pickaxe' | 'bow';
-export type TileTypeStr = 'void' | 'track' | 'empty' | 'train' | 'tree' | 'rock' | 'enemy';
+export type TileTypeStr = 'void' | 'track' | 'search' | 'train' | 'tree' | 'rock' | 'enemy';
 export type WeatherType = 'sunny' | 'rain' | 'windy';
 export type ViewState = 'map' | 'shop' | 'gameover';
 
@@ -36,6 +36,7 @@ export interface Tile {
   scavengeLeft: number;
   attack: number;
   effect: 'pop' | 'flash' | null;
+  searchCount?: number;
 }
 
 export interface Recipe {

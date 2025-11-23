@@ -16,10 +16,14 @@ export const Tile: React.FC<TileProps> = ({ tile, tools, weather, energy, onTile
   const config = getTileConfig(tile.type);
   const Icon = config.icon || Search;
 
-  const actionCost = weather === 'windy' ? GAME_CONFIG.ACTIONS.COST_WINDY : GAME_CONFIG.ACTIONS.COST_BASE;
+  let actionCost = weather === 'windy' ? GAME_CONFIG.ACTIONS.COST_WINDY : GAME_CONFIG.ACTIONS.COST_BASE;
+  if (tile.type === 'search') {
+    const tileSearchCount = tile.searchCount || 0;
+    actionCost = GAME_CONFIG.ACTIONS.SEARCH_COST_INITIAL + (tileSearchCount * GAME_CONFIG.ACTIONS.SEARCH_COST_INCREASE);
+  }
   const hasEnergy = energy >= actionCost;
   const isTrain = tile.type === 'train';
-  
+
   // --- STATE LOGIC ---
   const isRevealed = tile.revealed;
   const isPeeked = !isRevealed && tile.peeked;
@@ -31,51 +35,59 @@ export const Tile: React.FC<TileProps> = ({ tile, tools, weather, energy, onTile
     isRevealed &&
     !isVoid &&
     tile.type !== 'track' &&
-    (!tile.cleared || ((tile.type === 'empty' || tile.type === 'tree') && tile.scavengeLeft > 0));
+    (!tile.cleared || ((tile.type === 'search' || tile.type === 'tree') && tile.scavengeLeft > 0));
+
+  const showStaminaCost = isInteractable && ['search', 'tree', 'rock'].includes(tile.type);
 
   // --- STYLE LOGIC ---
-  
-  // 1. Background & Visibility
-  let appearanceClass = '';
-  
+  let containerClass = `
+    relative group flex items-center justify-center
+    w-8 h-8 sm:w-10 sm:h-10 lg:w-14 lg:h-14 
+    rounded-xl transition-all duration-200
+    focus:outline-none
+  `;
+
   if (isHidden) {
-    // FOG OF WAR: Uniform dark block
-    appearanceClass = 'bg-stone-900 border border-stone-800/20 opacity-100'; 
-  } 
+    // FOG OF WAR
+    containerClass += ' bg-stone-900 border-2 border-stone-800/50 shadow-inner';
+  }
   else if (isPeeked) {
-    // PEEKED: Show color/hint, but dimmed. No interactions.
+    // PEEKED
     if (isVoid) {
-      appearanceClass = 'opacity-0 border-none'; // Gap is visible
+      containerClass += ' opacity-0';
     } else {
-      // Visible color but darker (50% opacity), no border detail
-      appearanceClass = `${config.color} opacity-50 border-none cursor-default grayscale-[0.3]`;
-    }
-  } 
-  else {
-    // REVEALED: Full visuals
-    if (isVoid) {
-       appearanceClass = 'opacity-0 pointer-events-none';
-    } else {
-       appearanceClass = `${config.color} shadow-lg opacity-100`;
-       if (tile.type !== 'track') appearanceClass += ' border-t border-l border-r';
+      containerClass += ` ${config.color} opacity-40 grayscale border-2 border-transparent`;
     }
   }
+  else {
+    // REVEALED
+    if (isVoid) {
+      containerClass += ' opacity-0 pointer-events-none';
+    } else {
+      containerClass += ` ${config.color} shadow-md border-2`;
 
-  // 2. Interaction/Status Cursor
-  let cursorClass = 'cursor-default';
-  if (isRevealed && !isVoid) {
-     if (isInteractable) {
+      // Border Style
+      if (tile.type === 'track') {
+        containerClass += ' border-transparent';
+      } else {
+        containerClass += ' border-black/10';
+      }
+
+      // Interaction States
+      if (isInteractable) {
         if (hasEnergy) {
-           cursorClass = 'cursor-pointer hover:scale-105 hover:z-10 active:scale-95';
+          // Interactive & Affordable
+          containerClass += ' cursor-pointer hover:scale-105 hover:border-white/40 hover:shadow-xl hover:z-10 active:scale-95';
         } else {
-           cursorClass = 'cursor-not-allowed grayscale opacity-50';
+          // Interactive but No Energy
+          containerClass += ' cursor-not-allowed opacity-80 grayscale-[0.5]';
         }
-     } else if (isTrain) {
-       cursorClass = 'cursor-default';
-     } else {
-       // Revealed but cleared/empty
-       cursorClass = 'cursor-default opacity-60';
-     }
+      } else {
+        // Not Interactive (Cleared, Track, Train, etc.)
+        containerClass += ' cursor-default';
+        if (tile.cleared) containerClass += ' opacity-60';
+      }
+    }
   }
 
   const animationClass = tile.effect === 'pop' ? 'animate-ping-once' : tile.effect === 'flash' ? 'bg-red-500/50' : '';
@@ -84,13 +96,7 @@ export const Tile: React.FC<TileProps> = ({ tile, tools, weather, energy, onTile
     <button
       onClick={() => onTileClick(tile)}
       disabled={!isInteractable}
-      className={`
-        w-8 h-8 sm:w-10 sm:h-10 lg:w-14 lg:h-14 rounded-md transition-all duration-300 relative group
-        flex items-center justify-center
-        ${appearanceClass}
-        ${cursorClass}
-        ${animationClass}
-      `}
+      className={`${containerClass} ${animationClass}`}
     >
       {/* CONTENT LAYER (Only if Fully Revealed and Not Void) */}
       {isRevealed && !isVoid && (
@@ -107,11 +113,18 @@ export const Tile: React.FC<TileProps> = ({ tile, tools, weather, energy, onTile
           )}
 
           {/* Scavenge Dots */}
-          {tile.scavengeLeft > 0 && (tile.type === 'empty' || tile.type === 'tree') && (
+          {tile.scavengeLeft > 0 && (tile.type === 'search' || tile.type === 'tree') && (
             <div className="absolute bottom-1 flex gap-0.5 z-10 bg-black/20 px-1 rounded-full">
               {Array.from({ length: Math.min(3, tile.scavengeLeft) }).map((_, i) => (
                 <div key={i} className={`w-1 h-1 rounded-full ${tile.type === 'tree' ? 'bg-emerald-400' : 'bg-stone-400'}`}></div>
               ))}
+            </div>
+          )}
+
+          {/* Stamina Cost Badge */}
+          {showStaminaCost && (
+            <div className="absolute -bottom-2 -right-2 z-20 bg-stone-900 text-yellow-400 text-[10px] px-1.5 py-0.5 rounded-full border border-yellow-700 shadow-md font-mono font-bold">
+              {actionCost}
             </div>
           )}
 
@@ -121,7 +134,7 @@ export const Tile: React.FC<TileProps> = ({ tile, tools, weather, energy, onTile
               absolute -top-2 -right-2 z-20 bg-stone-900 text-[10px] p-1 rounded-full border shadow-md
               ${tools[config.tool] > 0 ? 'border-emerald-600 text-emerald-400' : 'border-red-900 text-red-500'}
             `}>
-              {config.tool === 'axe' ? <Axe size={10}/> : config.tool === 'pickaxe' ? <Pickaxe size={10}/> : <Sword size={10}/>}
+              {config.tool === 'axe' ? <Axe size={10} /> : config.tool === 'pickaxe' ? <Pickaxe size={10} /> : <Sword size={10} />}
             </div>
           )}
         </>

@@ -93,17 +93,23 @@ export const WorkshopPanel: React.FC<WorkshopPanelProps> = ({
         {/* Game Logs */}
         <div className="h-40 lg:h-1/3 border-t border-stone-800 bg-black p-4 overflow-y-auto font-mono text-xs space-y-1.5 custom-scrollbar shadow-inner">
             {logs.length === 0 && <div className="text-stone-700 italic">System ready. Awaiting input...</div>}
-            {logs.map(log => (
-                <div key={log.id} className={`
-                    ${log.type === 'error' ? 'text-red-400 font-bold' : 
-                      log.type === 'success' ? 'text-emerald-400' : 
-                      log.type === 'important' ? 'text-amber-400 border-l-2 border-amber-500 pl-2' : 
-                      log.type === 'warning' ? 'text-orange-300' :
-                      'text-stone-500'}
-                `}>
-                    <span className="opacity-30 mr-2 select-none">›</span>{log.text}
-                </div>
-            ))}
+            {[...logs].reverse().map((log, i, arr) => {
+                const isNewest = i === arr.length - 1;
+                return (
+                    <div key={log.id} className={`
+                        transition-all duration-300
+                        ${log.type === 'error' ? 'text-red-400 font-bold' : 
+                          log.type === 'success' ? 'text-emerald-400' : 
+                          log.type === 'important' ? 'text-amber-400 border-l-2 border-amber-500 pl-2' : 
+                          log.type === 'warning' ? 'text-orange-300' :
+                          'text-stone-500'}
+                        ${isNewest ? 'opacity-100 bg-white/5 -mx-2 px-2 py-0.5 rounded' : 'opacity-60'}
+                    `}>
+                        <span className={`mr-2 select-none ${isNewest ? 'opacity-100' : 'opacity-30'}`}>›</span>
+                        {log.text}
+                    </div>
+                );
+            })}
             <div ref={logsEndRef} />
         </div>
     </section>
