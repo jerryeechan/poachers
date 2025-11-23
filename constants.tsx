@@ -1,6 +1,6 @@
 import {
   Train, Trees, MoreHorizontal, Mountain, Skull, Search,
-  Axe, Pickaxe, Crosshair, Flame, Box, Gem
+  Axe, Pickaxe, Crosshair, Flame, Box, Gem, User
 } from 'lucide-react';
 import { Recipe, TileConfig, TileTypeStr, ItemType } from './types';
 
@@ -8,7 +8,7 @@ export const GRID_SIZE = 8;
 export const MAX_ENERGY = 20;
 export const MAX_HP = 20;
 export const MAX_TOOL_DURABILITY = 5;
-export const BASE_CAPACITY = 100;
+export const BASE_CAPACITY = 20;
 export const CARRIAGE_CAPACITY_BONUS = 10;
 export const INVENTORY_SIZE = 10;
 
@@ -30,9 +30,11 @@ export const GAME_CONFIG = {
   ACTIONS: {
     COST_BASE: 5,
     COST_WINDY: 12,
-    BOW_BONUS_DMG: 2,
-    SEARCH_COST_INITIAL: 5,
-    SEARCH_COST_INCREASE: -2,
+    PLAYER_BASE_DMG: 1,
+    BOW_DMG: 3,
+    SEARCH_COST_INITIAL: 3,
+    SEARCH_COST_INCREASE: -1,
+    ENEMY_COST: 2,
   },
   TRAIN: {
     PRESSURE_BASE: 50,
@@ -49,9 +51,15 @@ export const GAME_CONFIG = {
     },
     PROBS: {
       // Safe Zone: Center track +/- 1
-      SAFE: { TREE: 0.35, ROCK: 0.50, ENEMY_BASE: 0.52, ENEMY_SCALE: 0.02 },
+      SAFE: { TREE: 0.35, ROCK: 0.50, ENEMY_BASE: 0.2, ENEMY_SCALE: 0.02, NPC: 0.55 },
       // Danger Zone: Everywhere else
-      DANGER: { TREE: 0.28, ROCK: 0.42, ENEMY_BASE: 0.47, ENEMY_SCALE: 0.03 },
+      DANGER: { TREE: 0.28, ROCK: 0.42, ENEMY_BASE: 0.2, ENEMY_SCALE: 0.03, NPC: 0.50 },
+    },
+    NPC: {
+      RESCUE_TURNS_MIN: 2,
+      RESCUE_TURNS_VAR: 2,
+      TRAIN_CAPACITY_BASE: 3,
+      MIN_DISTANCE_FROM_TRAIN: 4,
     },
     LOOT: {
       TREE_MIN: 2, TREE_VAR: 3,
@@ -61,7 +69,8 @@ export const GAME_CONFIG = {
       EMPTY_CHANCE_STONE_THRESHOLD: 0.80,
     },
     ENEMIES: {
-      ATTACK_MIN: 2, ATTACK_VAR: 3, ATTACK_STATION_MULT: 0.5,
+      ATTACK_MIN: 1, ATTACK_VAR: 3, ATTACK_STATION_MULT: 0.5,
+      HP_MIN: 1, HP_VAR: 4, HP_STATION_MULT: 1,
       LOOT_WOOD_MIN: 1, LOOT_WOOD_VAR: 3,
       LOOT_STONE_MIN: 1, LOOT_STONE_VAR: 2,
     }
@@ -69,8 +78,8 @@ export const GAME_CONFIG = {
   REST: {
     HEAL_AMOUNT: 30,
     AMBUSH_CHANCE: 0.4, // 40% (1 - 0.6)
-    AMBUSH_ATTACK_MIN: 3,
-    AMBUSH_ATTACK_VAR: 3,
+    AMBUSH_ATTACK_MIN: 1,
+    AMBUSH_ATTACK_VAR: 1,
   },
   SHOP: {
     SELL: { WOOD: 5, STONE: 8, CHARCOAL: 15 },
@@ -112,7 +121,7 @@ export const RECIPES: Record<string, Recipe> = {
     staminaCost: 1
   },
   bow: {
-    input: [{ type: 'wood', count: 10 }, { type: 'stone', count: 5 }],
+    input: [{ type: 'wood', count: 2 }, { type: 'stone', count: 5 }],
     output: { type: 'bow', count: 1, durability: MAX_TOOL_DURABILITY },
     desc: "Weapon (Durability 5)",
     staminaCost: 1
@@ -127,6 +136,7 @@ export const TILE_TYPES: Record<string, TileConfig> = {
   TREE: { id: 'tree', icon: Trees, color: 'bg-emerald-900 text-emerald-400 border-emerald-800 hover:border-emerald-500', tool: 'axe' },
   ROCK: { id: 'rock', icon: Mountain, color: 'bg-slate-700 text-slate-300 border-slate-600 hover:border-slate-400', tool: 'pickaxe' },
   ENEMY: { id: 'enemy', icon: Skull, color: 'bg-red-950 text-red-400 border-red-900 hover:border-red-500', tool: 'bow' },
+  NPC: { id: 'npc', icon: User, color: 'bg-blue-900 text-blue-300 border-blue-800 hover:border-blue-500' },
 };
 
 export const getTileConfig = (type: TileTypeStr): TileConfig => {

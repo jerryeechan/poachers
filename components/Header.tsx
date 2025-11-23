@@ -1,28 +1,36 @@
 import React from 'react';
-import { Flame, Droplets, Wind, Coins, Trees, Mountain, Train } from 'lucide-react';
+import { Flame, Droplets, Wind, Coins, Trees, Mountain, Train, Users } from 'lucide-react';
 import { Inventory, WeatherType, ViewState } from '../types';
 import { GAME_CONFIG } from '../constants';
 
 interface HeaderProps {
   station: number;
+  day: number;
+  san: number;
   weather: WeatherType;
   gold: number;
   inventory: Inventory;
   pressure: number;
   targetPressure: number;
   viewState: ViewState;
+  rescuedNPCs: { buff: 'stamina' | 'vitality' | 'attack' }[];
+  maxTrainCapacity: number;
   onAddFuel: (type: 'wood' | 'charcoal') => void;
   onDepart: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   station,
+  day,
+  san,
   weather,
   gold,
   inventory,
   pressure,
   targetPressure,
   viewState,
+  rescuedNPCs,
+  maxTrainCapacity,
   onAddFuel,
   onDepart
 }) => {
@@ -30,6 +38,11 @@ export const Header: React.FC<HeaderProps> = ({
   const getCount = (type: string) => inventory.reduce((acc, item) => (item?.type === type ? acc + item.count : acc), 0);
   const woodCount = getCount('wood');
   const charcoalCount = getCount('charcoal');
+
+  // Calculate enemy spawn rate (same formula as in map.ts)
+  const sanModifier = san * 0.2;
+  const baseEnemyRate = GAME_CONFIG.MAP.PROBS.DANGER.ENEMY_BASE + (station * GAME_CONFIG.MAP.PROBS.DANGER.ENEMY_SCALE);
+  const enemySpawnRate = ((baseEnemyRate + sanModifier) * 100).toFixed(1);
 
   return (
     <header className="bg-stone-900 border-b border-stone-800 p-3 shadow-xl z-20 shrink-0">
@@ -40,6 +53,15 @@ export const Header: React.FC<HeaderProps> = ({
             <div className="bg-stone-800 px-3 py-1 rounded-full border border-stone-700 flex items-center gap-2">
               <span className="font-bold text-amber-500 text-sm">SECTOR {station}</span>
             </div>
+            <div className="bg-stone-800 px-3 py-1 rounded-full border border-stone-700 flex items-center gap-2">
+              <span className="font-bold text-blue-400 text-sm">DAY {day}</span>
+            </div>
+            <div className="bg-stone-800 px-3 py-1 rounded-full border border-stone-700 flex items-center gap-2">
+              <span className="font-bold text-purple-400 text-sm">SAN: {san}</span>
+            </div>
+            <div className="bg-stone-800/50 px-3 py-1 rounded-full border border-red-700/50 flex items-center gap-2">
+              <span className="font-bold text-red-400 text-[10px] uppercase tracking-wider">Enemy Rate: {enemySpawnRate}%</span>
+            </div>
             <div className="flex gap-2 items-center text-stone-400 bg-stone-800/50 px-2 py-1 rounded-full">
               {weather === 'sunny' ? <Flame size={12} className="text-amber-400" /> :
                 weather === 'rain' ? <Droplets size={12} className="text-blue-400" /> :
@@ -49,9 +71,16 @@ export const Header: React.FC<HeaderProps> = ({
               </span>
             </div>
           </div>
-          <div className="flex items-center gap-1 text-yellow-400 font-mono text-sm border border-yellow-500/30 bg-yellow-500/10 px-3 py-1 rounded-full">
-            <Coins size={14} />
-            <span className="font-bold">{gold} G</span>
+          <div className="flex items-center gap-2">
+            {/* Train Capacity */}
+            <div className="flex items-center gap-1 text-blue-400 font-mono text-sm border border-blue-500/30 bg-blue-500/10 px-3 py-1 rounded-full">
+              <Users size={14} />
+              <span className="font-bold">{rescuedNPCs.length}/{maxTrainCapacity}</span>
+            </div>
+            <div className="flex items-center gap-1 text-yellow-400 font-mono text-sm border border-yellow-500/30 bg-yellow-500/10 px-3 py-1 rounded-full">
+              <Coins size={14} />
+              <span className="font-bold">{gold} G</span>
+            </div>
           </div>
         </div>
 

@@ -2,7 +2,7 @@ import { LucideIcon } from 'lucide-react';
 
 export type ResourceType = 'wood' | 'stone' | 'charcoal';
 export type ToolType = 'axe' | 'pickaxe' | 'bow';
-export type TileTypeStr = 'void' | 'track' | 'search' | 'train' | 'tree' | 'rock' | 'enemy';
+export type TileTypeStr = 'void' | 'track' | 'search' | 'train' | 'tree' | 'rock' | 'enemy' | 'npc';
 export type WeatherType = 'sunny' | 'rain' | 'windy';
 export type ViewState = 'map' | 'shop' | 'gameover';
 
@@ -39,6 +39,8 @@ export interface TileConfig {
   tool?: ToolType;
 }
 
+export type NPCBuff = 'stamina' | 'vitality' | 'attack';
+
 export interface Tile {
   id: string;
   x: number;
@@ -51,6 +53,12 @@ export interface Tile {
   attack: number;
   effect: 'pop' | 'flash' | null;
   searchCount?: number;
+  hp?: number;
+  maxHp?: number;
+  // NPC Properties
+  npcBuff?: NPCBuff;
+  rescueProgress?: number;
+  maxRescueProgress?: number;
 }
 
 export interface Recipe {
@@ -73,6 +81,7 @@ export interface RestReport {
   pressureLoss: number;
   enemiesCount: number;
   ambush: { id: string; attack: number } | null;
+  spawnedEnemies?: { id: string; attack: number; hp: number }[];
 }
 
 export interface GameStats {
@@ -81,4 +90,5 @@ export interface GameStats {
   enemiesDefeated: number;
   itemsCrafted: number;
   stationsPassed: number;
+  san: number; // Sanity - affects enemy spawn rate
 }

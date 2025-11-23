@@ -15,6 +15,7 @@ import { Tile } from './components/Tile';
 import { ShopOverlay } from './components/ShopOverlay';
 import { RestReportModal } from './components/RestReportModal';
 import { GameOverModal } from './components/GameOverModal';
+import { EnemySpawnAnimation } from './components/EnemySpawnAnimation';
 import { Header } from './components/Header';
 import { StatusFooter } from './components/StatusFooter';
 import { WorkshopPanel } from './components/WorkshopPanel';
@@ -26,7 +27,8 @@ import { getAvatarFace, calculateRestOutcome } from './utils/gameplay';
 
 export default function App() {
   // --- Global State ---
-  const [station, setStation] = useState(1);
+  const [station, setStation] = useState(0);
+  const [day, setDay] = useState(1);
   const [energy, setEnergy] = useState(MAX_ENERGY);
   const [hp, setHp] = useState(MAX_HP);
   const [gold, setGold] = useState(0);
@@ -36,6 +38,10 @@ export default function App() {
 
   const [carriageLevel, setCarriageLevel] = useState(0);
 
+  // Train Capacity & Rescued NPCs
+  const [rescuedNPCs, setRescuedNPCs] = useState<{ buff: 'stamina' | 'vitality' | 'attack' }[]>([]);
+  const maxTrainCapacity = GAME_CONFIG.MAP.NPC.TRAIN_CAPACITY_BASE;
+
   // Statistics for Score
   const [gameStats, setGameStats] = useState<GameStats>({
     totalWood: 0,
@@ -43,6 +49,7 @@ export default function App() {
     enemiesDefeated: 0,
     itemsCrafted: 0,
     stationsPassed: 0,
+    san: 0,
   });
 
   // Train State
@@ -55,15 +62,29 @@ export default function App() {
   const [weather, setWeather] = useState<WeatherType>('sunny');
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [restReport, setRestReport] = useState<RestReport | null>(null);
+  const [showEnemySpawnAnimation, setShowEnemySpawnAnimation] = useState(false);
+  const [enemySpawnRate, setEnemySpawnRate] = useState(0);
+  const [spawnResults, setSpawnResults] = useState<boolean[]>([]);
 
   // Computed Properties
   const currentLoad = inventory.reduce((acc, item) => acc + (item ? item.count : 0), 0);
   const maxCapacity = BASE_CAPACITY + (carriageLevel * CARRIAGE_CAPACITY_BONUS);
 
+  // Apply NPC Buffs
+  const staminaBuffs = rescuedNPCs.filter(npc => npc.buff === 'stamina').length;
+  const vitalityBuffs = rescuedNPCs.filter(npc => npc.buff === 'vitality').length;
+  const attackBuffs = rescuedNPCs.filter(npc => npc.buff === 'attack').length;
+
+  const buffedMaxEnergy = MAX_ENERGY + (staminaBuffs * 5);
+  const buffedMaxHp = MAX_HP + (vitalityBuffs * 5);
+  const buffedAttack = GAME_CONFIG.ACTIONS.PLAYER_BASE_DMG + attackBuffs;
+
   // --- Helpers ---
   const addLog = useCallback((text: string, type: LogEntry['type'] = 'neutral') => {
     setLogs(prev => [{ id: Date.now() + Math.random(), text, type }, ...prev].slice(0, 15));
   }, []);
+
+  const [selectedSlot, setSelectedSlot] = useState<number | undefined>(undefined);
 
   // Inventory Helpers (Refactored to be pure-ish)
   const addToInventory = (currentInv: Inventory, type: ItemType, count: number, durability?: number): { newInv: Inventory, added: number } => {
@@ -132,20 +153,18 @@ export default function App() {
     return inventory.find(item => item?.type === type && (item.durability === undefined || item.durability > 0));
   };
 
-  const decreaseToolDurability = (currentInv: Inventory, type: ItemType): Inventory => {
+  const decreaseToolDurability = (currentInv: Inventory, slotIndex: number): Inventory => {
     const newInv = [...currentInv];
-    const index = newInv.findIndex(item => item?.type === type && (item.durability === undefined || item.durability > 0));
+    const item = newInv[slotIndex];
 
-    if (index !== -1) {
-      const item = newInv[index]!;
-      if (item.durability !== undefined) {
-        const newDurability = item.durability - 1;
-        if (newDurability <= 0) {
-          newInv[index] = null;
-          addLog(`Your ${type} broke!`, 'error');
-        } else {
-          newInv[index] = { ...item, durability: newDurability };
-        }
+    if (item && item.durability !== undefined) {
+      const newDurability = item.durability - 1;
+      if (newDurability <= 0) {
+        newInv[slotIndex] = null;
+        addLog(`Your ${item.type} broke!`, 'error');
+        if (selectedSlot === slotIndex) setSelectedSlot(undefined);
+      } else {
+        newInv[slotIndex] = { ...item, durability: newDurability };
       }
     }
     return newInv;
@@ -160,9 +179,9 @@ export default function App() {
 
   // --- Map Logic ---
   const generateMap = useCallback(() => {
-    const newGrid = generateLevel(station);
+    const newGrid = generateLevel(station, gameStats.san);
     setGrid(newGrid);
-  }, [station]);
+  }, [station, gameStats.san]);
 
   // Initialize Map
   useEffect(() => {
@@ -172,6 +191,13 @@ export default function App() {
     }
   }, [station, generateMap, viewState, grid.length, addLog]);
 
+  const handleSlotClick = (index: number) => {
+    if (selectedSlot === index) {
+      setSelectedSlot(undefined);
+    } else {
+      setSelectedSlot(index);
+    }
+  };
 
   // --- Actions ---
   const handleTileClick = (tile: TileType) => {
@@ -184,6 +210,28 @@ export default function App() {
     if (tile.type === 'search') {
       const tileSearchCount = tile.searchCount || 0;
       cost = GAME_CONFIG.ACTIONS.SEARCH_COST_INITIAL + (tileSearchCount * GAME_CONFIG.ACTIONS.SEARCH_COST_INCREASE);
+    } else if (tile.type === 'tree') {
+      const tileSearchCount = tile.searchCount || 0;
+      cost = GAME_CONFIG.ACTIONS.SEARCH_COST_INITIAL + (tileSearchCount * GAME_CONFIG.ACTIONS.SEARCH_COST_INCREASE);
+    } else if (tile.type === 'enemy') {
+      cost = GAME_CONFIG.ACTIONS.ENEMY_COST;
+    } else if (tile.type === 'npc') {
+      cost = GAME_CONFIG.ACTIONS.COST_BASE;
+    }
+
+    // NPC Rescue: Check if enemies are on the field
+    if (tile.type === 'npc') {
+      const hasEnemies = grid.some(t => t.type === 'enemy' && t.revealed && !t.cleared);
+      if (hasEnemies) {
+        addLog("Cannot rescue while enemies are present!", "error");
+        return;
+      }
+
+      // Check train capacity
+      if (rescuedNPCs.length >= maxTrainCapacity) {
+        addLog("Train is at full capacity!", "error");
+        return;
+      }
     }
 
     if (energy < cost) {
@@ -191,22 +239,31 @@ export default function App() {
       return;
     }
 
-    // Check Tool
-    if (config.tool) {
-      const tool = findTool(config.tool as ItemType);
-      if (!tool) {
-        const hasItem = inventory.some(i => i?.type === config.tool);
-        if (hasItem) {
-          addLog(`Your ${config.tool} is broken!`, "error");
-        } else {
-          addLog(`Requires ${config.tool}!`, "error");
-        }
+    // Check Tool (for non-combat interactions)
+    if (config.tool && tile.type !== 'enemy') {
+      const selectedItem = selectedSlot !== undefined ? inventory[selectedSlot] : null;
+      // If a specific tool is required, check if it's selected OR if we have it (auto-select logic could go here, but let's stick to manual or auto-find)
+      // For now, let's keep the auto-find logic for tools like Axe/Pickaxe for QoL, but prioritize selected.
+
+      // Actually, let's enforce selection for everything if we want consistency?
+      // The prompt only specified "click on bow to toggle active".
+      // Let's keep auto-find for Axe/Pickaxe for QoL, but prioritize selected.
+
+      let toolIndex = -1;
+      if (selectedItem && selectedItem.type === config.tool) {
+        toolIndex = selectedSlot!;
+      } else {
+        toolIndex = inventory.findIndex(item => item?.type === config.tool && (item.durability === undefined || item.durability > 0));
+      }
+
+      if (toolIndex === -1) {
+        addLog(`Requires ${config.tool}!`, "error");
         return;
       }
     }
 
     const estimatedLoot = 1;
-    if (currentLoad + estimatedLoot > maxCapacity && tile.type !== 'search') {
+    if (currentLoad + estimatedLoot > maxCapacity && tile.type !== 'search' && tile.type !== 'enemy') {
       addLog("Cargo full! Cannot carry more.", "error");
       return;
     }
@@ -220,12 +277,6 @@ export default function App() {
     }, 400);
 
     let tempInv = [...inventory];
-
-    // Tool Durability
-    if (config.tool) {
-      tempInv = decreaseToolDurability(tempInv, config.tool as ItemType);
-    }
-
     const newGrid = [...grid];
     const targetTile = newGrid.find(t => t.id === tile.id);
     if (!targetTile) return;
@@ -233,52 +284,120 @@ export default function App() {
     let dropMsg = "";
     let loot: { type: ItemType, count: number }[] = [];
 
-    if (tile.type === 'tree') {
-      const amount = Math.floor(Math.random() * GAME_CONFIG.MAP.LOOT.TREE_VAR) + GAME_CONFIG.MAP.LOOT.TREE_MIN;
-      loot.push({ type: 'wood', count: amount });
-      targetTile.scavengeLeft = (targetTile.scavengeLeft || 0) - 1;
-      dropMsg = `Logging (+${amount} Wood)`;
-      if (targetTile.scavengeLeft <= 0) {
+    if (tile.type === 'enemy') {
+      // Combat Logic
+      const selectedItem = selectedSlot !== undefined ? tempInv[selectedSlot] : null;
+      const isUsingBow = selectedItem?.type === 'bow';
+
+      const playerDmg = isUsingBow ? GAME_CONFIG.ACTIONS.BOW_DMG : buffedAttack;
+      const enemyDmg = targetTile.attack;
+
+      // Apply Damage to Enemy
+      targetTile.hp = (targetTile.hp || 0) - playerDmg;
+
+      // Check if Enemy Defeated
+      if ((targetTile.hp || 0) <= 0) {
+        // Enemy Died
         targetTile.cleared = true;
         targetTile.type = 'search';
-      }
-    } else if (tile.type === 'rock') {
-      const amount = Math.floor(Math.random() * GAME_CONFIG.MAP.LOOT.ROCK_VAR) + GAME_CONFIG.MAP.LOOT.ROCK_MIN;
-      loot.push({ type: 'stone', count: amount });
-      dropMsg = `Mining (+${amount} Stone)`;
-      targetTile.cleared = true;
-      targetTile.type = 'search';
-    } else if (tile.type === 'enemy') {
-      const hasBow = findTool('bow');
-      const dmg = Math.max(1, targetTile.attack - (hasBow ? GAME_CONFIG.ACTIONS.BOW_BONUS_DMG : 0));
-      setHp(prev => prev - dmg);
-      if (hasBow) {
-        tempInv = decreaseToolDurability(tempInv, 'bow');
-      }
+        dropMsg = `Enemy Defeated!`;
+        setGameStats(prev => ({ ...prev, enemiesDefeated: prev.enemiesDefeated + 1 }));
 
-      const woodAmt = Math.floor(Math.random() * GAME_CONFIG.MAP.ENEMIES.LOOT_WOOD_VAR) + GAME_CONFIG.MAP.ENEMIES.LOOT_WOOD_MIN;
-      const stoneAmt = Math.floor(Math.random() * GAME_CONFIG.MAP.ENEMIES.LOOT_STONE_VAR) + GAME_CONFIG.MAP.ENEMIES.LOOT_STONE_MIN;
-      if (woodAmt > 0) loot.push({ type: 'wood', count: woodAmt });
-      if (stoneAmt > 0) loot.push({ type: 'stone', count: stoneAmt });
+        // Loot
+        const woodAmt = Math.floor(Math.random() * GAME_CONFIG.MAP.ENEMIES.LOOT_WOOD_VAR) + GAME_CONFIG.MAP.ENEMIES.LOOT_WOOD_MIN;
+        const stoneAmt = Math.floor(Math.random() * GAME_CONFIG.MAP.ENEMIES.LOOT_STONE_VAR) + GAME_CONFIG.MAP.ENEMIES.LOOT_STONE_MIN;
+        if (woodAmt > 0) loot.push({ type: 'wood', count: woodAmt });
+        if (stoneAmt > 0) loot.push({ type: 'stone', count: stoneAmt });
 
-      dropMsg = `Enemy Defeated (HP -${dmg})`;
-      targetTile.cleared = true;
-      targetTile.type = 'search';
-      setGameStats(prev => ({ ...prev, enemiesDefeated: prev.enemiesDefeated + 1 }));
-    } else if (tile.type === 'search') {
-      targetTile.scavengeLeft = (targetTile.scavengeLeft || 0) - 1;
-      targetTile.searchCount = (targetTile.searchCount || 0) + 1;
-      const roll = Math.random();
-      if (roll < GAME_CONFIG.MAP.LOOT.EMPTY_CHANCE_WOOD) {
-        loot.push({ type: 'wood', count: 1 });
-        dropMsg = "Found stray branch (+1 Wood)";
-      } else if (roll < GAME_CONFIG.MAP.LOOT.EMPTY_CHANCE_STONE_THRESHOLD) {
-        loot.push({ type: 'stone', count: 1 });
-        dropMsg = "Found loose rock (+1 Stone)";
+        // Player Damage Check
+        if (isUsingBow) {
+          addLog("Sniper Shot! Took no damage.", "success");
+          // Bow Durability
+          tempInv = decreaseToolDurability(tempInv, selectedSlot!);
+        } else {
+          setHp(prev => prev - enemyDmg);
+          addLog(`Took ${enemyDmg} damage!`, "warning");
+        }
+
       } else {
-        dropMsg = "Nothing found...";
+        // Enemy Survived
+        setHp(prev => prev - enemyDmg);
+        addLog(`Hit enemy for ${playerDmg}. Took ${enemyDmg} damage!`, "warning");
+        if (isUsingBow) {
+          tempInv = decreaseToolDurability(tempInv, selectedSlot!);
+        }
       }
-      if (!targetTile.cleared) targetTile.cleared = true;
+
+    } else {
+      // Non-Combat Logic
+      if (config.tool) {
+        // Find tool index again (safe because we checked earlier)
+        let toolIndex = -1;
+        if (selectedSlot !== undefined && tempInv[selectedSlot]?.type === config.tool) {
+          toolIndex = selectedSlot;
+        } else {
+          toolIndex = tempInv.findIndex(item => item?.type === config.tool && (item.durability === undefined || item.durability > 0));
+        }
+
+        if (toolIndex !== -1) {
+          tempInv = decreaseToolDurability(tempInv, toolIndex);
+        }
+      }
+
+      if (tile.type === 'tree') {
+        const amount = Math.floor(Math.random() * GAME_CONFIG.MAP.LOOT.TREE_VAR) + GAME_CONFIG.MAP.LOOT.TREE_MIN;
+        loot.push({ type: 'wood', count: amount });
+        targetTile.scavengeLeft = (targetTile.scavengeLeft || 0) - 1;
+        targetTile.searchCount = (targetTile.searchCount || 0) + 1;
+        dropMsg = `Logging (+${amount} Wood)`;
+        if (targetTile.scavengeLeft <= 0) {
+          targetTile.cleared = true;
+          targetTile.type = 'search';
+        }
+      } else if (tile.type === 'rock') {
+        const amount = Math.floor(Math.random() * GAME_CONFIG.MAP.LOOT.ROCK_VAR) + GAME_CONFIG.MAP.LOOT.ROCK_MIN;
+        loot.push({ type: 'stone', count: amount });
+        dropMsg = `Mining (+${amount} Stone)`;
+        targetTile.cleared = true;
+        targetTile.type = 'search';
+      } else if (tile.type === 'search') {
+        targetTile.scavengeLeft = (targetTile.scavengeLeft || 0) - 1;
+        targetTile.searchCount = (targetTile.searchCount || 0) + 1;
+        const roll = Math.random();
+        if (roll < GAME_CONFIG.MAP.LOOT.EMPTY_CHANCE_WOOD) {
+          loot.push({ type: 'wood', count: 1 });
+          dropMsg = "Found stray branch (+1 Wood)";
+        } else if (roll < GAME_CONFIG.MAP.LOOT.EMPTY_CHANCE_STONE_THRESHOLD) {
+          loot.push({ type: 'stone', count: 1 });
+          dropMsg = "Found loose rock (+1 Stone)";
+        } else {
+          dropMsg = "Nothing found...";
+        }
+        if (!targetTile.cleared) targetTile.cleared = true;
+      } else if (tile.type === 'npc') {
+        // NPC Rescue Logic
+        targetTile.rescueProgress = (targetTile.rescueProgress || 0) - 1;
+
+        if (targetTile.rescueProgress <= 0) {
+          // Rescue Complete!
+          targetTile.cleared = true;
+          targetTile.type = 'search';
+
+          const buff = targetTile.npcBuff || 'stamina';
+          setRescuedNPCs(prev => [...prev, { buff }]);
+
+          const buffNames = {
+            'stamina': 'Max Stamina',
+            'vitality': 'Max HP',
+            'attack': 'Attack Power'
+          };
+
+          dropMsg = `NPC Rescued! Gained ${buffNames[buff]} buff!`;
+          addLog(dropMsg, 'success');
+        } else {
+          dropMsg = `Rescuing... ${targetTile.rescueProgress} turns left`;
+        }
+      }
     }
 
     // Add Resources with Capacity check
@@ -303,7 +422,7 @@ export default function App() {
 
     // Reveal logic via Utility
     let newlyRevealed: TileType[] = [];
-    if (targetTile.cleared || targetTile.type === 'search') {
+    if (targetTile.cleared || targetTile.type === 'search' || tile.type === 'tree' || tile.type === 'rock') {
       newlyRevealed = revealNeighbors(targetTile.x, targetTile.y, newGrid);
     }
 
@@ -324,17 +443,75 @@ export default function App() {
   };
 
   const handleRest = () => {
-    const report = calculateRestOutcome(grid, pressure, energy, MAX_ENERGY);
+    // Calculate enemy spawn rate for animation
+    const sanModifier = gameStats.san * 0.2;
+    const baseEnemyRate = GAME_CONFIG.MAP.PROBS.DANGER.ENEMY_BASE + (station * GAME_CONFIG.MAP.PROBS.DANGER.ENEMY_SCALE);
+    const spawnRate = (baseEnemyRate + sanModifier) * 100;
+
+    // Pre-calculate results to ensure animation matches logic
+    const results: boolean[] = [];
+    let remainingRate = spawnRate;
+
+    while (remainingRate >= 100) {
+      results.push(true); // Guaranteed spawn
+      remainingRate -= 100;
+    }
+
+    if (remainingRate > 0) {
+      const roll = Math.random() * 100;
+      results.push(roll < remainingRate);
+    } else if (results.length === 0) {
+      // If rate is 0 (shouldn't happen with base rate but safe to handle), push one fail check if we want to show animation?
+      // Or maybe just don't show animation if rate is 0? 
+      // Current logic shows animation if rate > 0.
+      // If rate is exactly 100, remaining is 0. Loop runs once. results=[true]. Correct.
+      // If rate is 200, remaining is 0. Loop runs twice. results=[true, true]. Correct.
+    }
+
+    setSpawnResults(results);
+    setEnemySpawnRate(spawnRate);
+    setShowEnemySpawnAnimation(true);
+  };
+
+  const handleEnemySpawnComplete = (spawnedCount: number) => {
+    setShowEnemySpawnAnimation(false);
+
+    // Now calculate the actual rest outcome using the count from the animation (which matches our pre-calc)
+    const report = calculateRestOutcome(grid, pressure, energy, buffedMaxEnergy, station, gameStats.san, spawnedCount);
     setRestReport(report);
   };
 
   const applyRestResults = () => {
     if (!restReport) return;
 
-    setEnergy(MAX_ENERGY);
+    setEnergy(buffedMaxEnergy);
     // No HP recovery
     if (restReport.dmg > 0) setHp(prev => prev - restReport.dmg);
     setPressure(prev => Math.max(0, prev - restReport.pressureLoss));
+
+    // Increment day and sanity
+    setDay(prev => prev + 1);
+    setGameStats(prev => ({ ...prev, san: prev.san + 1 }));
+
+    // Handle spawned enemies from enemy spawn rate
+    if (restReport.spawnedEnemies && restReport.spawnedEnemies.length > 0) {
+      setGrid(prev => prev.map(t => {
+        const spawnedEnemy = restReport.spawnedEnemies!.find(e => e.id === t.id);
+        if (spawnedEnemy) {
+          return {
+            ...t,
+            type: 'enemy',
+            cleared: false,
+            scavengeLeft: 0,
+            attack: spawnedEnemy.attack,
+            hp: spawnedEnemy.hp,
+            maxHp: spawnedEnemy.hp
+          };
+        }
+        return t;
+      }));
+      addLog(`${restReport.spawnedEnemies.length} enemy(ies) spawned during rest!`, "error");
+    }
 
     if (restReport.ambush) {
       setGrid(prev => prev.map(t => {
@@ -429,7 +606,7 @@ export default function App() {
 
   const nextLevel = () => {
     setStation(prev => prev + 1);
-    setGameStats(prev => ({ ...prev, stationsPassed: prev.stationsPassed + 1 }));
+    setGameStats(prev => ({ ...prev, stationsPassed: prev.stationsPassed + 1, san: 0 })); // Reset san on new sector
     setPressure(0);
     setEnergy(prev => Math.floor(prev * GAME_CONFIG.LEVEL_TRANSITION.ENERGY_RETAIN_PCT));
     setViewState('map');
@@ -462,13 +639,13 @@ export default function App() {
   const buyHeal = () => {
     const cost = GAME_CONFIG.SHOP.BUY.HEAL;
     if (gold >= cost) {
-      if (hp >= MAX_HP && energy >= MAX_ENERGY) {
+      if (hp >= buffedMaxHp && energy >= buffedMaxEnergy) {
         addLog("Already fully rested.", "neutral");
         return;
       }
       setGold(prev => prev - cost);
-      setHp(MAX_HP);
-      setEnergy(MAX_ENERGY);
+      setHp(buffedMaxHp);
+      setEnergy(buffedMaxEnergy);
       addLog("Rations consumed. Full recovery.", "success");
     } else {
       addLog("Not enough Gold", "error");
@@ -477,11 +654,13 @@ export default function App() {
 
   const restartGame = () => {
     setStation(1);
+    setDay(1);
     setEnergy(MAX_ENERGY);
     setHp(MAX_HP);
     setGold(0);
     setInventory(Array(INVENTORY_SIZE).fill(null));
     setCarriageLevel(0);
+    setRescuedNPCs([]);
     setPressure(0);
     setGrid([]);
     setLogs([]);
@@ -491,22 +670,90 @@ export default function App() {
       enemiesDefeated: 0,
       itemsCrafted: 0,
       stationsPassed: 0,
+      san: 0,
     });
     setViewState('map');
     setRestReport(null);
   };
+
+  // Check if player is exhausted (no actions possible)
+  const isExhausted = React.useMemo(() => {
+    if (energy === 0) return true;
+
+    let hasStaminaBlockedAction = false;
+    let hasPossibleAction = false;
+
+    // 1. Check Crafting
+    for (const key in RECIPES) {
+      const recipe = RECIPES[key];
+      const staminaCost = recipe.staminaCost || 0;
+
+      const hasResources = recipe.input.every(req => {
+        const count = inventory.reduce((acc, item) => (item?.type === req.type ? acc + item.count : acc), 0);
+        return count >= req.count;
+      });
+
+      if (hasResources) {
+        if (energy >= staminaCost) {
+          hasPossibleAction = true;
+          break;
+        } else {
+          hasStaminaBlockedAction = true;
+        }
+      }
+    }
+
+    if (!hasPossibleAction) {
+      // 2. Check Tile Actions
+      for (const tile of grid) {
+        if (!tile.revealed || tile.type === 'void' || tile.type === 'track') continue;
+        if (tile.cleared && !(tile.type === 'search' && tile.scavengeLeft > 0)) continue;
+
+        let cost = weather === 'windy' ? GAME_CONFIG.ACTIONS.COST_WINDY : GAME_CONFIG.ACTIONS.COST_BASE;
+        if (tile.type === 'search') {
+          const tileSearchCount = tile.searchCount || 0;
+          cost = GAME_CONFIG.ACTIONS.SEARCH_COST_INITIAL + (tileSearchCount * GAME_CONFIG.ACTIONS.SEARCH_COST_INCREASE);
+        } else if (tile.type === 'tree') {
+          const tileSearchCount = tile.searchCount || 0;
+          cost = GAME_CONFIG.ACTIONS.SEARCH_COST_INITIAL + (tileSearchCount * GAME_CONFIG.ACTIONS.SEARCH_COST_INCREASE);
+        } else if (tile.type === 'enemy') {
+          cost = GAME_CONFIG.ACTIONS.ENEMY_COST;
+        }
+
+        // Check Tool Requirement
+        const config = TILE_TYPES[tile.type.toUpperCase()];
+        if (config.tool && tile.type !== 'enemy') {
+          const hasTool = inventory.some(item => item?.type === config.tool && (item.durability === undefined || item.durability > 0));
+          if (!hasTool) continue;
+        }
+
+        if (energy >= cost) {
+          hasPossibleAction = true;
+          break;
+        } else {
+          hasStaminaBlockedAction = true;
+        }
+      }
+    }
+
+    return !hasPossibleAction && hasStaminaBlockedAction;
+  }, [energy, grid, inventory, weather]);
 
   return (
     <div className="h-screen bg-stone-950 text-stone-200 font-sans select-none overflow-hidden flex flex-col">
 
       <Header
         station={station}
+        day={day}
+        san={gameStats.san}
         weather={weather}
         gold={gold}
         inventory={inventory}
         pressure={pressure}
         targetPressure={targetPressure}
         viewState={viewState}
+        rescuedNPCs={rescuedNPCs}
+        maxTrainCapacity={maxTrainCapacity}
         onAddFuel={addFuel}
         onDepart={depart}
       />
@@ -547,6 +794,7 @@ export default function App() {
                   inventory={inventory}
                   weather={weather}
                   energy={energy}
+                  rescuedNPCs={rescuedNPCs.length}
                   onTileClick={handleTileClick}
                 />
               ))}
@@ -554,18 +802,24 @@ export default function App() {
           </div>
 
           <div className="w-full max-w-2xl mx-auto mb-2">
-            <InventoryBar inventory={inventory} />
+            <InventoryBar
+              inventory={inventory}
+              selectedSlot={selectedSlot}
+              onSlotClick={handleSlotClick}
+            />
           </div>
 
           <StatusFooter
             hp={hp}
-            maxHp={MAX_HP}
+            maxHp={buffedMaxHp}
             energy={energy}
-            maxEnergy={MAX_ENERGY}
+            maxEnergy={buffedMaxEnergy}
             currentLoad={currentLoad}
             maxCapacity={maxCapacity}
-            avatar={getAvatarFace(hp, MAX_HP, energy, MAX_ENERGY)}
+            avatar={getAvatarFace(hp, buffedMaxHp, energy, buffedMaxEnergy)}
+            attack={selectedSlot !== undefined && inventory[selectedSlot]?.type === 'bow' ? GAME_CONFIG.ACTIONS.BOW_DMG : buffedAttack}
             onRest={handleRest}
+            isExhausted={isExhausted}
           />
         </section>
 
@@ -576,6 +830,15 @@ export default function App() {
           onCraft={craftItem}
         />
       </main>
+
+      {/* Enemy Spawn Animation */}
+      {showEnemySpawnAnimation && (
+        <EnemySpawnAnimation
+          enemySpawnRate={enemySpawnRate}
+          spawnResults={spawnResults}
+          onComplete={handleEnemySpawnComplete}
+        />
+      )}
 
       {/* Rest Report Modal */}
       {restReport && <RestReportModal report={restReport} onClose={applyRestResults} />}

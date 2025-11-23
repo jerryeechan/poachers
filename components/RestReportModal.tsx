@@ -22,8 +22,8 @@ export const RestReportModal: React.FC<RestReportModalProps> = ({ report, onClos
           </div>
 
           <div className="flex justify-between items-center p-2 bg-stone-950/50 rounded border border-stone-800/50">
-             <span className="text-stone-400">Boiler Pressure</span>
-             <span className="text-orange-400 font-bold">-{report.pressureLoss} PSI</span>
+            <span className="text-stone-400">Boiler Pressure</span>
+            <span className="text-orange-400 font-bold">-{report.pressureLoss} PSI</span>
           </div>
 
           {report.enemiesCount > 0 ? (
@@ -31,7 +31,19 @@ export const RestReportModal: React.FC<RestReportModalProps> = ({ report, onClos
               <span className="text-red-300">Night Raid ({report.enemiesCount} enemies)</span>
               <span className="font-bold text-red-500">-{report.dmg} HP</span>
             </div>
-          ) : (
+          ) : null}
+
+          {report.spawnedEnemies && report.spawnedEnemies.length > 0 && (
+            <div className="mt-4 p-3 bg-red-950/30 border border-red-900/50 rounded text-red-400 text-xs flex items-center gap-3">
+              <Skull size={20} />
+              <div>
+                <div className="font-bold">ENEMIES APPROACHING</div>
+                <div>{report.spawnedEnemies.length} new enemy(ies) spotted nearby.</div>
+              </div>
+            </div>
+          )}
+
+          {report.enemiesCount === 0 && (!report.spawnedEnemies || report.spawnedEnemies.length === 0) && (
             <div className="text-stone-500 italic text-center py-2">The night was quiet...</div>
           )}
 

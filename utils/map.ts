@@ -77,7 +77,7 @@ export const revealNeighbors = (cx: number, cy: number, currentGrid: TileType[])
   return newlyRevealed;
 };
 
-export const generateLevel = (station: number): TileType[] => {
+export const generateLevel = (station: number, san: number = 0): TileType[] => {
   const newGrid: TileType[] = [];
   const centerX = 3;
   const centerY = 3;
@@ -89,6 +89,7 @@ export const generateLevel = (station: number): TileType[] => {
       let cleared = false;
       let scavengeLeft = 0;
       let attack = 0;
+      let hp = 0;
 
       const dist = Math.abs(x - centerX) + Math.abs(y - centerY);
       const isSafeZone = (y >= centerY - GAME_CONFIG.MAP.SAFE_ZONE_OFFSET && y <= centerY + GAME_CONFIG.MAP.SAFE_ZONE_OFFSET);
@@ -125,6 +126,9 @@ export const generateLevel = (station: number): TileType[] => {
             attack = Math.floor(Math.random() * GAME_CONFIG.MAP.ENEMIES.ATTACK_VAR) +
               GAME_CONFIG.MAP.ENEMIES.ATTACK_MIN +
               Math.floor(station * GAME_CONFIG.MAP.ENEMIES.ATTACK_STATION_MULT);
+            hp = Math.floor(Math.random() * GAME_CONFIG.MAP.ENEMIES.HP_VAR) +
+              GAME_CONFIG.MAP.ENEMIES.HP_MIN +
+              Math.floor(station * GAME_CONFIG.MAP.ENEMIES.HP_STATION_MULT);
           } else {
             scavengeLeft = Math.floor(Math.random() * GAME_CONFIG.MAP.LOOT.SCAVENGE_VAR) + GAME_CONFIG.MAP.LOOT.SCAVENGE_MIN;
           }
@@ -133,6 +137,8 @@ export const generateLevel = (station: number): TileType[] => {
 
       newGrid.push({
         x, y, type, revealed, cleared, scavengeLeft, attack,
+        hp: type === 'enemy' ? hp : undefined,
+        maxHp: type === 'enemy' ? hp : undefined,
         effect: null,
         id: `${x}-${y}`,
         peeked: false
@@ -156,6 +162,40 @@ export const generateLevel = (station: number): TileType[] => {
       tile.revealed = true; // And we can see it
     }
   });
+
+  // --- FORCE EXACTLY 1 NPC PER SECTOR ---
+  // Find all non-void, non-track, non-train search tiles that could become NPCs
+  // Must be at least MIN_DISTANCE_FROM_TRAIN away from the train (using Manhattan distance: sum of x and y)
+  const minDistance = GAME_CONFIG.MAP.NPC.MIN_DISTANCE_FROM_TRAIN;
+  const potentialNPCTiles = newGrid.filter(t => {
+    if (t.type !== 'search' || t.revealed || t.y === centerY) {
+      return false;
+    }
+
+    // Calculate distance from train (Manhattan distance: sum of x and y offsets)
+    const xDist = Math.abs(t.x - centerX);
+    const yDist = Math.abs(t.y - centerY);
+    const manhattanDistance = xDist + yDist;
+
+    return manhattanDistance >= minDistance;
+  });
+
+  if (potentialNPCTiles.length > 0) {
+    // Pick a random tile to become an NPC
+    const npcTile = potentialNPCTiles[Math.floor(Math.random() * potentialNPCTiles.length)];
+
+    // Convert to NPC
+    npcTile.type = 'npc';
+
+    // Assign random buff
+    const buffs: ('stamina' | 'vitality' | 'attack')[] = ['stamina', 'vitality', 'attack'];
+    npcTile.npcBuff = buffs[Math.floor(Math.random() * buffs.length)];
+
+    // Assign rescue turns
+    const rescueTurns = Math.floor(Math.random() * GAME_CONFIG.MAP.NPC.RESCUE_TURNS_VAR) + GAME_CONFIG.MAP.NPC.RESCUE_TURNS_MIN;
+    npcTile.rescueProgress = rescueTurns;
+    npcTile.maxRescueProgress = rescueTurns;
+  }
 
   // Run initial reveal logic
   // 1. Reveal neighbors of the Train (Center)
