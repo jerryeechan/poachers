@@ -9,10 +9,12 @@ import { calculateEnemyLevel } from './gameplay';
  * Uncleared obstacles (Tree, Rock, Enemy) block vision.
  */
 const isLightSource = (tile: TileType | undefined): boolean => {
-  if (!tile || !tile.revealed) return false;
+  // if (!tile || !tile.revealed) return false;
   // Void, Track, Train are always transparent. 
   // Other types are only transparent if cleared (which usually converts them to 'empty', but checking cleared is safer)
-  return tile.type === 'void' || tile.type === 'track' || tile.type === 'train' || tile.type === 'search' || tile.cleared;
+  return tile.type === 'train' || tile.cleared || tile.revealed;
+  // return tile.type === 'void' || tile.type === 'train' || tile.type === 'search' || tile.cleared;
+  // return tile.type === 'void' || tile.type === 'track' || tile.type === 'train' || tile.type === 'search' || tile.cleared;
 };
 
 /**
@@ -56,26 +58,10 @@ export const updatePeekStatus = (grid: TileType[]) => {
  * This should typically only be called when the center tile is a LightSource (e.g. just moved to, or just cleared).
  */
 export const revealNeighbors = (cx: number, cy: number, currentGrid: TileType[]) => {
-  const neighbors = [{ dx: 0, dy: -1 }, { dx: 0, dy: 1 }, { dx: -1, dy: 0 }, { dx: 1, dy: 0 }];
-  const newlyRevealed: TileType[] = [];
-
-  neighbors.forEach(({ dx, dy }) => {
-    const targetX = cx + dx;
-    const targetY = cy + dy;
-
-    if (targetX >= 0 && targetX < GRID_SIZE && targetY >= 0 && targetY < GRID_SIZE) {
-      const targetTile = currentGrid.find(t => t.x === targetX && t.y === targetY);
-      if (targetTile && !targetTile.revealed) {
-        targetTile.revealed = true;
-        newlyRevealed.push(targetTile);
-      }
-    }
-  });
-
-  // After revealing new tiles, update the peek status for the rest of the grid
+  // We no longer reveal neighbors directly. We just update the peek status.
+  // Neighbors of a light source become 'peeked' (explorable), not 'revealed'.
   updatePeekStatus(currentGrid);
-
-  return newlyRevealed;
+  return [];
 };
 
 export const generateLevel = (station: number, san: number = 0): TileType[] => {
@@ -103,7 +89,7 @@ export const generateLevel = (station: number, san: number = 0): TileType[] => {
         } else {
           type = 'track';
           revealed = true;
-          cleared = true;
+          cleared = false;
         }
       } else {
         let voidChance = 0;
@@ -137,13 +123,18 @@ export const generateLevel = (station: number, san: number = 0): TileType[] => {
         }
       }
 
+      const configKey = type.toUpperCase() as keyof typeof GAME_CONFIG.EXPLORATION.CLICKS_REQUIRED;
+      const maxExploration = GAME_CONFIG.EXPLORATION.CLICKS_REQUIRED[configKey] ?? 1;
+
       newGrid.push({
         x, y, type, revealed, cleared, scavengeLeft, attack,
         hp: type === 'enemy' ? hp : undefined,
         maxHp: type === 'enemy' ? hp : undefined,
         effect: null,
         id: `${x}-${y}`,
-        peeked: false
+        peeked: false,
+        explorationProgress: 0,
+        maxExploration
       });
     }
   }
@@ -160,8 +151,9 @@ export const generateLevel = (station: number, san: number = 0): TileType[] => {
     if (tile) {
       tile.type = 'search';
       tile.scavengeLeft = Math.floor(Math.random() * 2) + 2;
-      tile.cleared = true; // It's open ground
-      tile.revealed = true; // And we can see it
+      tile.cleared = false; // It's open ground
+      tile.revealed = false; // Not revealed yet
+      tile.peeked = true; // But explorable
     }
   });
 
@@ -200,8 +192,8 @@ export const generateLevel = (station: number, san: number = 0): TileType[] => {
   }
 
   // Run initial reveal logic
-  // 1. Reveal neighbors of the Train (Center)
-  revealNeighbors(centerX, centerY, newGrid);
+  // 1. Reveal neighbors of the Train (Center) - REMOVED to respect "only up/down explorable"
+  // revealNeighbors(centerX, centerY, newGrid);
 
   // 2. Reveal neighbors of the forced open tiles.
   // This ensures we see the first layer of trees/rocks around our starting clearing.

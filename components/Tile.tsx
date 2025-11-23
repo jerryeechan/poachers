@@ -1,6 +1,6 @@
 import React from 'react';
 import { Axe, Pickaxe, Sword, Search, Heart, Zap, Heart as health, Swords, Ban, Hammer, Trees, Gem } from 'lucide-react';
-import { Tile as TileInterface, Inventory, NPCBuff } from '../types';
+import { Tile as TileInterface, Inventory, BuffType } from '../types';
 import { getTileConfig, GAME_CONFIG } from '../constants';
 
 interface TileProps {
@@ -33,7 +33,7 @@ const NPCOverlay: React.FC<{ tile: TileInterface }> = ({ tile }) => {
   const maxProgress = (tile.maxRescueProgress || 1);
   const progressPct = ((maxProgress - progress) / maxProgress) * 100;
 
-  const buffIcons: Record<NPCBuff, any> = {
+  const buffIcons: Record<BuffType, any> = {
     'stamina': Zap,
     'health': health,
     'attack': Swords
@@ -90,7 +90,7 @@ const BadgesOverlay: React.FC<{
   <>
     {/* Stamina Cost Badge */}
     {showStaminaCost && (
-      <div className="absolute -bottom-2 -right-2 z-20 bg-stone-900 text-yellow-400 text-[10px] px-1.5 py-0.5 rounded-full border border-yellow-700 shadow-md font-mono font-bold">
+      <div className="absolute -bottom-2 -right-2 z-20 bg-stone-900 text-yellow-400 text-[10px] px-1.5 py-0.5 rounded-full border border-yellow-700 shadow-md font-mono font-bold opacity-0 group-hover:opacity-100 transition-opacity duration-200">
         {actionCost}
       </div>
     )}
@@ -98,7 +98,7 @@ const BadgesOverlay: React.FC<{
     {/* Tool Requirement Badge */}
     {config.tool && !tile.cleared && tile.type !== 'enemy' && (
       <div className={`
-        absolute -top-2 -right-2 z-20 bg-stone-900 text-[10px] p-1 rounded-full border shadow-md
+        absolute -top-2 -right-2 z-20 bg-stone-900 text-[10px] p-1 rounded-full border shadow-md opacity-0 group-hover:opacity-100 transition-opacity duration-200
         ${hasTool ? 'border-emerald-600 text-emerald-400' : 'border-red-900 text-red-500'}
       `}>
         {config.tool === 'axe' ? <Axe size={10} /> : config.tool === 'pickaxe' ? <Pickaxe size={10} /> : <Sword size={10} />}
@@ -106,6 +106,29 @@ const BadgesOverlay: React.FC<{
     )}
   </>
 );
+
+const ExplorationOverlay: React.FC<{ tile: TileInterface }> = ({ tile }) => {
+  const progress = tile.explorationProgress || 0;
+  const max = tile.maxExploration || 1;
+  const pct = (progress / max) * 100;
+
+  return (
+    <div className="absolute inset-0 z-20 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-[1px] rounded-xl" />
+      <Search className="text-white/70 relative z-10 animate-pulse" size={20} />
+
+      {/* Progress Bar */}
+      {max > 1 && (
+        <div className="absolute bottom-1 left-1/2 -translate-x-1/2 w-[80%] h-1 bg-stone-800 rounded-full overflow-hidden z-20 border border-stone-600">
+          <div
+            className="h-full bg-amber-400 transition-all duration-300"
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+      )}
+    </div>
+  );
+};
 
 // --- Main Tile Component ---
 
@@ -115,16 +138,22 @@ export const Tile: React.FC<TileProps> = ({ tile, inventory, weather, energy, re
 
   // 1. Calculate Costs & Requirements
   let actionCost = weather === 'windy' ? GAME_CONFIG.ACTIONS.COST_WINDY : GAME_CONFIG.ACTIONS.COST_BASE;
+
+  // Cost calculation logic is now handled in tileActions.ts for the click handler,
+  // but we still need it here for the badge display.
+  // Ideally we should import calculateTileCost here too, but for now let's keep the display logic simple or duplicate it.
+  // Actually, let's stick to the simple display logic for now to avoid circular deps or complex refactors.
+
   if (tile.type === 'search') {
-    const tileSearchCount = tile.searchCount || 0;
-    actionCost = GAME_CONFIG.ACTIONS.SEARCH_COST_INITIAL + (tileSearchCount * GAME_CONFIG.ACTIONS.SEARCH_COST_INCREASE);
+    // Search tiles are now just empty, no increasing cost
+    actionCost = GAME_CONFIG.ACTIONS.COST_BASE;
   } else if (tile.type === 'tree') {
     const tileSearchCount = tile.searchCount || 0;
     actionCost = GAME_CONFIG.ACTIONS.SEARCH_COST_INITIAL + (tileSearchCount * GAME_CONFIG.ACTIONS.SEARCH_COST_INCREASE);
   } else if (tile.type === 'enemy') {
     actionCost = GAME_CONFIG.ACTIONS.ENEMY_COST;
   } else if (tile.type === 'track' && tile.isBroken) {
-    actionCost = GAME_CONFIG.ACTIONS.COST_BASE; // Repair costs energy too? Let's assume yes.
+    actionCost = GAME_CONFIG.ACTIONS.COST_BASE;
   }
 
   const hasEnergy = energy >= actionCost;
@@ -138,15 +167,15 @@ export const Tile: React.FC<TileProps> = ({ tile, inventory, weather, energy, re
   const isHidden = !isRevealed && !isPeeked;
   const isVoid = tile.type === 'void';
 
-  const isInteractable = isRevealed && !isVoid && !isBlocked &&
-    (
+  const isInteractable = !isBlocked && (
+    isPeeked || // Can always explore peeked tiles
+    (isRevealed && (
       (tile.type === 'track' && tile.isBroken) ||
-      (tile.type !== 'track' && (!tile.cleared || ((tile.type === 'search' || tile.type === 'tree') && tile.scavengeLeft > 0) || (tile.type === 'npc' && !tile.cleared)))
-    );
+      (tile.type !== 'track' && (!tile.cleared || ((tile.type === 'tree') && tile.scavengeLeft > 0) || (tile.type === 'npc' && !tile.cleared)))
+    ))
+  );
 
-  const showStaminaCost = isInteractable && tile.type !== 'track'; // Don't show stamina badge for track repair, overlay handles it (or maybe we should?)
-  // Actually, repair usually costs resources, maybe not stamina? Or both?
-  // The prompt didn't specify stamina cost for repair. I'll assume standard action cost.
+  const showStaminaCost = isInteractable && tile.type !== 'track';
 
   // 3. Determine Styles
   let containerClass = `
@@ -159,7 +188,8 @@ export const Tile: React.FC<TileProps> = ({ tile, inventory, weather, energy, re
   if (isHidden) {
     containerClass += ' bg-stone-900 border-2 border-stone-800/50 shadow-inner';
   } else if (isPeeked) {
-    containerClass += isVoid ? ' opacity-0' : ` ${config.color} opacity-40 grayscale border-2 border-transparent`;
+    // Unexplored / Peeked State
+    containerClass += ' bg-stone-800 border-2 border-stone-700 cursor-pointer hover:border-amber-500/50 hover:shadow-lg';
   } else {
     // Revealed
     if (isVoid) {
@@ -173,7 +203,7 @@ export const Tile: React.FC<TileProps> = ({ tile, inventory, weather, energy, re
       }
 
       if (isInteractable) {
-        if (hasEnergy && hasTool) {
+        if (hasEnergy && (hasTool || isPeeked)) { // No tool needed for exploration
           containerClass += ' cursor-pointer hover:scale-105 hover:border-white/40 hover:shadow-xl hover:z-10 active:scale-95';
         } else {
           containerClass += ' cursor-not-allowed opacity-80 grayscale-[0.5]';
@@ -194,6 +224,13 @@ export const Tile: React.FC<TileProps> = ({ tile, inventory, weather, energy, re
       disabled={!isInteractable}
       className={`${containerClass} ${animationClass}`}
     >
+      {/* Hidden State */}
+      {isHidden && <div className="w-full h-full bg-stone-950/50 rounded-xl" />}
+
+      {/* Peeked / Unexplored State */}
+      {isPeeked && <ExplorationOverlay tile={tile} />}
+
+      {/* Revealed State */}
       {isRevealed && !isVoid && (
         <>
           {tile.type === 'track' && <div className={`absolute w-[140%] h-[4px] rounded-full ${tile.isBroken ? 'bg-red-900/50 rotate-12' : 'bg-stone-700/50'}`} />}
@@ -205,7 +242,7 @@ export const Tile: React.FC<TileProps> = ({ tile, inventory, weather, energy, re
 
           {tile.type === 'npc' && !tile.cleared && <NPCOverlay tile={tile} />}
 
-          {tile.scavengeLeft > 0 && (tile.type === 'search' || tile.type === 'tree') && <ScavengeOverlay tile={tile} />}
+          {tile.scavengeLeft > 0 && (tile.type === 'tree') && <ScavengeOverlay tile={tile} />}
 
           {tile.type === 'track' && tile.isBroken && (() => {
             const woodCost = GAME_CONFIG.MAP.BROKEN_TRACKS.REPAIR_COST_WOOD;

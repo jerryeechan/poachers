@@ -8,34 +8,51 @@ interface InventoryBarProps {
     selectedSlot?: number;
     onSlotClick?: (index: number) => void;
     onCraftClick?: () => void;
+    currentLoad: number;
+    maxCapacity: number;
 }
 
-export const InventoryBar: React.FC<InventoryBarProps> = ({ inventory, selectedSlot, onSlotClick, onCraftClick }) => {
+export const InventoryBar: React.FC<InventoryBarProps> = ({ inventory, selectedSlot, onSlotClick, onCraftClick, currentLoad, maxCapacity }) => {
     // Create an array of size INVENTORY_SIZE to map over
     const slots = Array.from({ length: INVENTORY_SIZE }, (_, i) => inventory[i] || null);
 
     return (
-        <div className="flex items-center justify-center gap-2 p-2 bg-stone-900/90 border-t border-stone-800 backdrop-blur-sm">
-            <div className="flex items-center gap-1">
-                {slots.map((item, index) => (
-                    <InventorySlot
-                        key={index}
-                        item={item}
-                        index={index}
-                        isSelected={selectedSlot === index}
-                        onClick={() => onSlotClick && onSlotClick(index)}
-                    />
-                ))}
+        <div className="flex flex-col">
+            <div className="flex items-center justify-center gap-2 p-2 bg-stone-900/90 border-t border-stone-800 backdrop-blur-sm">
+                <div className="flex items-center gap-1">
+                    {slots.map((item, index) => (
+                        <InventorySlot
+                            key={index}
+                            item={item}
+                            index={index}
+                            isSelected={selectedSlot === index}
+                            onClick={() => onSlotClick && onSlotClick(index)}
+                        />
+                    ))}
+                </div>
+
+                {/* Craft Button */}
+                <button
+                    onClick={onCraftClick}
+                    className="w-10 h-10 sm:w-12 sm:h-12 bg-amber-900 hover:bg-amber-800 border-2 border-amber-700 hover:border-amber-600 rounded-md flex items-center justify-center transition-all shadow-lg hover:shadow-amber-900/50"
+                    title="Open Field Workshop"
+                >
+                    <Hammer className="w-5 h-5 sm:w-6 sm:h-6 text-amber-200" />
+                </button>
             </div>
 
-            {/* Craft Button */}
-            <button
-                onClick={onCraftClick}
-                className="w-10 h-10 sm:w-12 sm:h-12 bg-amber-900 hover:bg-amber-800 border-2 border-amber-700 hover:border-amber-600 rounded-md flex items-center justify-center transition-all shadow-lg hover:shadow-amber-900/50"
-                title="Open Field Workshop"
-            >
-                <Hammer className="w-5 h-5 sm:w-6 sm:h-6 text-amber-200" />
-            </button>
+            {/* Cargo Capacity Display */}
+            <div className="flex items-center justify-center bg-stone-900/90 border-t border-stone-800 backdrop-blur-sm p-2">
+                <div className="w-full max-w-md h-4 bg-stone-950 rounded border border-stone-700 overflow-hidden relative group">
+                    <div
+                        className={`h-full transition-all duration-300 ${currentLoad >= maxCapacity ? 'bg-red-600' : 'bg-blue-600'}`}
+                        style={{ width: `${Math.min(100, (currentLoad / maxCapacity) * 100)}%` }}
+                    />
+                    <div className="absolute inset-0 flex items-center justify-center text-[9px] text-white font-mono font-bold drop-shadow-md">
+                        {currentLoad} / {maxCapacity}
+                    </div>
+                </div>
+            </div>
         </div>
     );
 };

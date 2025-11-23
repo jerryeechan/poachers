@@ -1,5 +1,5 @@
 import React from 'react';
-import { Heart, Zap, Package, Tent, Sword, ScrollText } from 'lucide-react';
+import { Heart, Zap, Tent, Sword, ScrollText } from 'lucide-react';
 import { LogEntry } from '../types';
 
 interface StatusFooterProps {
@@ -68,21 +68,6 @@ export const StatusFooter: React.FC<StatusFooterProps> = ({
                             <Sword size={10} className="text-amber-500" /> Attack
                         </span>
                         <span className="text-xs font-bold text-amber-500">{attack}</span>
-                    </div>
-                </div>
-            </div>
-
-            <div className="flex flex-col gap-1 w-24 sm:w-32 items-center">
-                <div className="flex items-center gap-1 text-[10px] text-stone-400 font-bold uppercase tracking-wider">
-                    <Package size={10} /> Cargo Hold
-                </div>
-                <div className="w-full h-4 bg-stone-950 rounded border border-stone-700 overflow-hidden relative group">
-                    <div
-                        className={`h-full transition-all duration-300 ${currentLoad >= maxCapacity ? 'bg-red-600' : 'bg-blue-600'}`}
-                        style={{ width: `${Math.min(100, (currentLoad / maxCapacity) * 100)}%` }}
-                    />
-                    <div className="absolute inset-0 flex items-center justify-center text-[9px] text-white font-mono font-bold drop-shadow-md">
-                        {currentLoad} / {maxCapacity}
                     </div>
                 </div>
             </div>

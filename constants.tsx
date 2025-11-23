@@ -29,7 +29,7 @@ export const GAME_CONFIG = {
     ENERGY_TIRED_PCT: 0.5,      // 50% Energy
   },
   ACTIONS: {
-    COST_BASE: 5,
+    COST_BASE: 1,
     COST_WINDY: 12,
     PLAYER_BASE_DMG: 1,
     BOW_DMG: 3,
@@ -43,6 +43,22 @@ export const GAME_CONFIG = {
     FUEL_GAIN_WOOD: 2,
     FUEL_GAIN_CHARCOAL: 10,
     DECAY_ON_REST: 10,
+  },
+  EXPLORATION: {
+    CLICKS_REQUIRED: {
+      TREE: 1,
+      ROCK: 1,
+      ENEMY: 1,
+      SEARCH: 1, // Empty ground is easy to see
+      TRACK: 1,
+      NPC: 1,
+      TRAIN: 0, // Should be visible immediately usually
+      VOID: 0,
+    },
+    REWARD: {
+      TREE: { type: 'wood' as const, count: 1 },
+      ROCK: { type: 'stone' as const, count: 1 },
+    },
   },
   MAP: {
     SAFE_ZONE_OFFSET: 1, // Distance from center track

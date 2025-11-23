@@ -24,8 +24,9 @@ import { LogModal } from './components/LogModal';
 import { InventoryBar } from './components/InventoryBar';
 
 // Utilities
-import { generateLevel, revealNeighbors } from './utils/map';
+import { generateLevel, revealNeighbors, updatePeekStatus } from './utils/map';
 import { getAvatarFace, calculateRestOutcome, calculateEnemyLevel } from './utils/gameplay';
+import { canClickTile, validateAndCalculateCost, findToolIndex, calculateTileCost, TileActionContext } from './utils/tileActions';
 
 export default function App() {
   // --- Global State ---
@@ -205,58 +206,90 @@ export default function App() {
 
   // --- Actions ---
   const handleTileClick = (tile: TileType) => {
-    if (viewState === 'gameover') return;
-    if (!tile.revealed || tile.type === 'void' || (tile.type === 'track' && !tile.isBroken)) return;
-    if (tile.cleared && !(tile.type === 'search' && tile.scavengeLeft > 0) && !(tile.type === 'track' && tile.isBroken)) return;
-
-    const config = TILE_TYPES[tile.type.toUpperCase()];
-    let cost = weather === 'windy' ? GAME_CONFIG.ACTIONS.COST_WINDY : GAME_CONFIG.ACTIONS.COST_BASE;
-    if (tile.type === 'search') {
-      const tileSearchCount = tile.searchCount || 0;
-      cost = GAME_CONFIG.ACTIONS.SEARCH_COST_INITIAL + (tileSearchCount * GAME_CONFIG.ACTIONS.SEARCH_COST_INCREASE);
-    } else if (tile.type === 'tree') {
-      const tileSearchCount = tile.searchCount || 0;
-      cost = GAME_CONFIG.ACTIONS.SEARCH_COST_INITIAL + (tileSearchCount * GAME_CONFIG.ACTIONS.SEARCH_COST_INCREASE);
-    } else if (tile.type === 'enemy') {
-      cost = GAME_CONFIG.ACTIONS.ENEMY_COST;
-    } else if (tile.type === 'npc') {
-      cost = GAME_CONFIG.ACTIONS.COST_BASE;
-    }
-
-    // NPC Rescue: Check if enemies are on the field
-    if (tile.type === 'npc') {
-      const hasEnemies = grid.some(t => t.type === 'enemy' && t.revealed && !t.cleared);
-      if (hasEnemies) {
-        addLog("Cannot rescue while enemies are present!", "error");
-        return;
-      }
-
-      // Check train capacity
-      if (rescuedNPCs.length >= maxTrainCapacity) {
-        addLog("Train is at full capacity!", "error");
-        return;
-      }
-    }
-
-    if (energy < cost) {
-      addLog("Exhausted! You need to Rest.", "error");
+    // Check if tile can be clicked
+    console.log("Tile clicked" + tile.type);
+    if (!canClickTile(tile, viewState)) {
       return;
     }
 
-    // Broken Track Repair Logic
+    // Create context for validation
+    const context: TileActionContext = {
+      tile,
+      grid,
+      inventory,
+      energy,
+      weather,
+      viewState,
+      rescuedNPCs,
+      maxTrainCapacity,
+      selectedSlot
+    };
+
+    // Validate and calculate cost
+    const result = validateAndCalculateCost(context);
+    if (!result.canProceed) {
+      addLog(result.errorMessage!, "error");
+      return;
+    }
+    const cost = result.cost;
+
+    // Exploration Logic
+    if (!tile.revealed && tile.peeked) {
+      setEnergy(prev => prev - cost);
+
+      const newGrid = [...grid];
+      const targetTile = newGrid.find(t => t.id === tile.id);
+      if (!targetTile) return;
+
+      targetTile.explorationProgress = (targetTile.explorationProgress || 0) + 1;
+
+      if (targetTile.explorationProgress >= (targetTile.maxExploration || 1)) {
+        // Reveal!
+        targetTile.revealed = true;
+        targetTile.effect = 'pop';
+
+        // Handle Discovery Rewards
+        const rewardConfig = GAME_CONFIG.EXPLORATION.REWARD[targetTile.type.toUpperCase() as keyof typeof GAME_CONFIG.EXPLORATION.REWARD];
+        if (rewardConfig) {
+          const res = addToInventory(inventory, rewardConfig.type, rewardConfig.count);
+          setInventory(res.newInv);
+          addLog(`Explored and found ${rewardConfig.count} ${rewardConfig.type}!`, 'success');
+
+          if (rewardConfig.type === 'wood') setGameStats(prev => ({ ...prev, totalWood: prev.totalWood + rewardConfig.count }));
+          if (rewardConfig.type === 'stone') setGameStats(prev => ({ ...prev, totalStone: prev.totalStone + rewardConfig.count }));
+        } else {
+          addLog("Area explored.", 'neutral');
+        }
+
+        // If the revealed tile is transparent (like Search/Empty), it might reveal neighbors
+        // We can use the utility isLightSource if we export it, or just check types
+        // Search tiles are transparent.
+        if (targetTile.type === 'search') {
+          targetTile.cleared = true;
+          const newlyRevealed = revealNeighbors(targetTile.x, targetTile.y, newGrid);
+          // Handle ambush for newly revealed enemies from this chain reaction
+          let ambushDmg = 0;
+          newlyRevealed.forEach(t => {
+            if (t.type === 'enemy') {
+              ambushDmg += t.attack;
+              addLog(`Ambush! Nearby enemy spotted! (HP -${t.attack})`, 'error');
+              t.effect = 'flash';
+            }
+          });
+          if (ambushDmg > 0) setHp(prev => prev - ambushDmg);
+        }
+      } else {
+        addLog("Exploring...", 'neutral');
+      }
+      updatePeekStatus(newGrid);
+      setGrid(newGrid);
+      return;
+    }
+
+    // Broken Track Repair Logic (special case that returns early)
     if (tile.type === 'track' && tile.isBroken) {
       const woodCost = GAME_CONFIG.MAP.BROKEN_TRACKS.REPAIR_COST_WOOD;
       const stoneCost = GAME_CONFIG.MAP.BROKEN_TRACKS.REPAIR_COST_STONE;
-
-      const woodItem = inventory.find(i => i?.type === 'wood');
-      const stoneItem = inventory.find(i => i?.type === 'stone');
-      const woodCount = woodItem ? woodItem.count : 0;
-      const stoneCount = stoneItem ? stoneItem.count : 0;
-
-      if (woodCount < woodCost || stoneCount < stoneCost) {
-        addLog(`Need ${woodCost} Wood and ${stoneCost} Stone to repair!`, "error");
-        return;
-      }
 
       setEnergy(prev => prev - cost);
 
@@ -273,6 +306,7 @@ export default function App() {
     }
 
     // Check Tool (for non-combat interactions)
+    const config = TILE_TYPES[tile.type.toUpperCase()];
     if (config.tool && tile.type !== 'enemy') {
       const selectedItem = selectedSlot !== undefined ? inventory[selectedSlot] : null;
       // If a specific tool is required, check if it's selected OR if we have it (auto-select logic could go here, but let's stick to manual or auto-find)
@@ -379,20 +413,19 @@ export default function App() {
 
     } else {
       // Non-Combat Logic
+      // const config = TILE_TYPES[tile.type.toUpperCase()]; // Already defined above
       if (config.tool) {
-        // Find tool index again (safe because we checked earlier)
-        let toolIndex = -1;
-        if (selectedSlot !== undefined && tempInv[selectedSlot]?.type === config.tool) {
-          toolIndex = selectedSlot;
-        } else {
-          toolIndex = tempInv.findIndex(item => item?.type === config.tool && (item.durability === undefined || item.durability > 0));
-        }
+        // Find tool index using utility function
+        const toolIndex = findToolIndex(tempInv, config.tool, selectedSlot);
 
         if (toolIndex !== -1) {
           tempInv = decreaseToolDurability(tempInv, toolIndex);
         }
       }
 
+      // if (tile.type === 'search') {
+      //   targetTile.cleared = true;
+      // }
       if (tile.type === 'tree') {
         const amount = Math.floor(Math.random() * GAME_CONFIG.MAP.LOOT.TREE_VAR) + GAME_CONFIG.MAP.LOOT.TREE_MIN;
         loot.push({ type: 'wood', count: amount });
@@ -409,20 +442,6 @@ export default function App() {
         dropMsg = `Mining (+${amount} Stone)`;
         targetTile.cleared = true;
         targetTile.type = 'search';
-      } else if (tile.type === 'search') {
-        targetTile.scavengeLeft = (targetTile.scavengeLeft || 0) - 1;
-        targetTile.searchCount = (targetTile.searchCount || 0) + 1;
-        const roll = Math.random();
-        if (roll < GAME_CONFIG.MAP.LOOT.EMPTY_CHANCE_WOOD) {
-          loot.push({ type: 'wood', count: 1 });
-          dropMsg = "Found stray branch (+1 Wood)";
-        } else if (roll < GAME_CONFIG.MAP.LOOT.EMPTY_CHANCE_STONE_THRESHOLD) {
-          loot.push({ type: 'stone', count: 1 });
-          dropMsg = "Found loose rock (+1 Stone)";
-        } else {
-          dropMsg = "Nothing found...";
-        }
-        if (!targetTile.cleared) targetTile.cleared = true;
       } else if (tile.type === 'npc') {
         // NPC Rescue Logic
         targetTile.rescueProgress = (targetTile.rescueProgress || 0) - 1;
@@ -747,16 +766,8 @@ export default function App() {
         if (!tile.revealed || tile.type === 'void' || tile.type === 'track') continue;
         if (tile.cleared && !(tile.type === 'search' && tile.scavengeLeft > 0)) continue;
 
-        let cost = weather === 'windy' ? GAME_CONFIG.ACTIONS.COST_WINDY : GAME_CONFIG.ACTIONS.COST_BASE;
-        if (tile.type === 'search') {
-          const tileSearchCount = tile.searchCount || 0;
-          cost = GAME_CONFIG.ACTIONS.SEARCH_COST_INITIAL + (tileSearchCount * GAME_CONFIG.ACTIONS.SEARCH_COST_INCREASE);
-        } else if (tile.type === 'tree') {
-          const tileSearchCount = tile.searchCount || 0;
-          cost = GAME_CONFIG.ACTIONS.SEARCH_COST_INITIAL + (tileSearchCount * GAME_CONFIG.ACTIONS.SEARCH_COST_INCREASE);
-        } else if (tile.type === 'enemy') {
-          cost = GAME_CONFIG.ACTIONS.ENEMY_COST;
-        }
+        // Use utility function for cost calculation
+        const cost = calculateTileCost(tile, weather);
 
         // Check Tool Requirement
         const config = TILE_TYPES[tile.type.toUpperCase()];
@@ -860,6 +871,8 @@ export default function App() {
               selectedSlot={selectedSlot}
               onSlotClick={handleSlotClick}
               onCraftClick={() => setShowWorkshopModal(true)}
+              currentLoad={currentLoad}
+              maxCapacity={maxCapacity}
             />
           </div>
 
