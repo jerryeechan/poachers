@@ -56,8 +56,8 @@ export const GAME_CONFIG = {
       DANGER: { TREE: 0.28, ROCK: 0.42, ENEMY_BASE: 0.2, ENEMY_SCALE: 0.03, NPC: 0.50 },
     },
     NPC: {
-      RESCUE_TURNS_MIN: 2,
-      RESCUE_TURNS_VAR: 2,
+      RESCUE_TURNS_MIN: 3,
+      RESCUE_TURNS_VAR: 1,
       TRAIN_CAPACITY_BASE: 3,
       MIN_DISTANCE_FROM_TRAIN: 4,
     },
@@ -73,6 +73,12 @@ export const GAME_CONFIG = {
       HP_MIN: 1, HP_VAR: 4, HP_STATION_MULT: 1,
       LOOT_WOOD_MIN: 1, LOOT_WOOD_VAR: 3,
       LOOT_STONE_MIN: 1, LOOT_STONE_VAR: 2,
+    },
+    BROKEN_TRACKS: {
+      BASE: 1,
+      PER_SECTOR: 1,
+      REPAIR_COST_WOOD: 3,
+      REPAIR_COST_STONE: 3,
     }
   },
   REST: {

@@ -188,7 +188,7 @@ export const generateLevel = (station: number, san: number = 0): TileType[] => {
     npcTile.type = 'npc';
 
     // Assign random buff
-    const buffs: ('stamina' | 'vitality' | 'attack')[] = ['stamina', 'vitality', 'attack'];
+    const buffs: ('stamina' | 'health' | 'attack')[] = ['stamina', 'health', 'attack'];
     npcTile.npcBuff = buffs[Math.floor(Math.random() * buffs.length)];
 
     // Assign rescue turns
@@ -206,6 +206,21 @@ export const generateLevel = (station: number, san: number = 0): TileType[] => {
   // startAccessible.forEach(pos => {
   //     revealNeighbors(pos.x, pos.y, newGrid);
   // });
+
+  // --- BROKEN TRACKS ---
+  const trackTiles = newGrid.filter(t => t.type === 'track');
+  const brokenCount = Math.min(trackTiles.length, GAME_CONFIG.MAP.BROKEN_TRACKS.BASE + (station) * GAME_CONFIG.MAP.BROKEN_TRACKS.PER_SECTOR);
+
+  // Shuffle tracks to pick random ones
+  for (let i = trackTiles.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [trackTiles[i], trackTiles[j]] = [trackTiles[j], trackTiles[i]];
+  }
+
+  // Mark first N as broken
+  for (let i = 0; i < brokenCount; i++) {
+    trackTiles[i].isBroken = true;
+  }
 
   // Final pass to set peek status correctly based on the initial reveals
   updatePeekStatus(newGrid);

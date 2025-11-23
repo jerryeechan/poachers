@@ -1,5 +1,5 @@
 import React from 'react';
-import { Axe, Pickaxe, Sword, Search, Heart, Zap, Heart as Vitality, Swords } from 'lucide-react';
+import { Axe, Pickaxe, Sword, Search, Heart, Zap, Heart as health, Swords, Ban, Hammer, Trees, Gem } from 'lucide-react';
 import { Tile as TileInterface, Inventory, NPCBuff } from '../types';
 import { getTileConfig, GAME_CONFIG } from '../constants';
 
@@ -10,6 +10,7 @@ interface TileProps {
   energy: number;
   rescuedNPCs: number;
   onTileClick: (tile: TileInterface) => void;
+  isBlocked?: boolean;
 }
 
 // --- Sub-Components for Specific Tile Types ---
@@ -34,7 +35,7 @@ const NPCOverlay: React.FC<{ tile: TileInterface }> = ({ tile }) => {
 
   const buffIcons: Record<NPCBuff, any> = {
     'stamina': Zap,
-    'vitality': Vitality,
+    'health': health,
     'attack': Swords
   };
 
@@ -62,6 +63,20 @@ const ScavengeOverlay: React.FC<{ tile: TileInterface }> = ({ tile }) => (
     {Array.from({ length: Math.min(3, tile.scavengeLeft) }).map((_, i) => (
       <div key={i} className={`w-1 h-1 rounded-full ${tile.type === 'tree' ? 'bg-emerald-400' : 'bg-stone-400'}`}></div>
     ))}
+  </div>
+);
+
+const BrokenTrackOverlay: React.FC<{ hasWood: boolean; hasStone: boolean }> = ({ hasWood, hasStone }) => (
+  <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/40 rounded-xl backdrop-blur-[1px]">
+    <Hammer className="text-amber-500 animate-pulse drop-shadow-lg" size={20} />
+    <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 flex gap-1 bg-stone-900 px-1.5 py-0.5 rounded-full border border-stone-700 shadow-xl z-30 whitespace-nowrap">
+      <div className={`flex items-center gap-0.5 text-[10px] font-bold font-mono ${hasWood ? 'text-emerald-400' : 'text-red-400'}`}>
+        <Trees size={10} />3
+      </div>
+      <div className={`flex items-center gap-0.5 text-[10px] font-bold font-mono ${hasStone ? 'text-emerald-400' : 'text-red-400'}`}>
+        <Gem size={10} />3
+      </div>
+    </div>
   </div>
 );
 
@@ -94,7 +109,7 @@ const BadgesOverlay: React.FC<{
 
 // --- Main Tile Component ---
 
-export const Tile: React.FC<TileProps> = ({ tile, inventory, weather, energy, rescuedNPCs, onTileClick }) => {
+export const Tile: React.FC<TileProps> = ({ tile, inventory, weather, energy, rescuedNPCs, onTileClick, isBlocked }) => {
   const config = getTileConfig(tile.type);
   const Icon = config.icon || Search;
 
@@ -108,6 +123,8 @@ export const Tile: React.FC<TileProps> = ({ tile, inventory, weather, energy, re
     actionCost = GAME_CONFIG.ACTIONS.SEARCH_COST_INITIAL + (tileSearchCount * GAME_CONFIG.ACTIONS.SEARCH_COST_INCREASE);
   } else if (tile.type === 'enemy') {
     actionCost = GAME_CONFIG.ACTIONS.ENEMY_COST;
+  } else if (tile.type === 'track' && tile.isBroken) {
+    actionCost = GAME_CONFIG.ACTIONS.COST_BASE; // Repair costs energy too? Let's assume yes.
   }
 
   const hasEnergy = energy >= actionCost;
@@ -121,10 +138,15 @@ export const Tile: React.FC<TileProps> = ({ tile, inventory, weather, energy, re
   const isHidden = !isRevealed && !isPeeked;
   const isVoid = tile.type === 'void';
 
-  const isInteractable = isRevealed && !isVoid && tile.type !== 'track' &&
-    (!tile.cleared || ((tile.type === 'search' || tile.type === 'tree') && tile.scavengeLeft > 0) || (tile.type === 'npc' && !tile.cleared));
+  const isInteractable = isRevealed && !isVoid && !isBlocked &&
+    (
+      (tile.type === 'track' && tile.isBroken) ||
+      (tile.type !== 'track' && (!tile.cleared || ((tile.type === 'search' || tile.type === 'tree') && tile.scavengeLeft > 0) || (tile.type === 'npc' && !tile.cleared)))
+    );
 
-  const showStaminaCost = isInteractable;// && ['search', 'tree', 'rock'].includes(tile.type);
+  const showStaminaCost = isInteractable && tile.type !== 'track'; // Don't show stamina badge for track repair, overlay handles it (or maybe we should?)
+  // Actually, repair usually costs resources, maybe not stamina? Or both?
+  // The prompt didn't specify stamina cost for repair. I'll assume standard action cost.
 
   // 3. Determine Styles
   let containerClass = `
@@ -145,6 +167,10 @@ export const Tile: React.FC<TileProps> = ({ tile, inventory, weather, energy, re
     } else {
       containerClass += ` ${config.color} shadow-md border-2`;
       containerClass += tile.type === 'track' ? ' border-transparent' : ' border-black/10';
+
+      if (tile.type === 'track' && tile.isBroken) {
+        containerClass += ' border-amber-900/50 bg-amber-950/30'; // Visual cue for broken
+      }
 
       if (isInteractable) {
         if (hasEnergy && hasTool) {
@@ -170,9 +196,9 @@ export const Tile: React.FC<TileProps> = ({ tile, inventory, weather, energy, re
     >
       {isRevealed && !isVoid && (
         <>
-          {tile.type === 'track' && <div className="absolute w-[140%] h-[4px] bg-stone-700/50 rounded-full" />}
+          {tile.type === 'track' && <div className={`absolute w-[140%] h-[4px] rounded-full ${tile.isBroken ? 'bg-red-900/50 rotate-12' : 'bg-stone-700/50'}`} />}
 
-          <Icon size={20} className={`relative z-10 drop-shadow-md ${tile.type === 'enemy' ? 'animate-pulse' : ''}`} />
+          <Icon size={20} className={`relative z-10 drop-shadow-md ${tile.type === 'enemy' ? 'animate-pulse' : ''} ${tile.isBroken ? 'text-red-500 opacity-50' : ''}`} />
 
           {/* Overlays based on Type */}
           {tile.type === 'enemy' && !tile.cleared && <EnemyOverlay tile={tile} />}
@@ -181,10 +207,25 @@ export const Tile: React.FC<TileProps> = ({ tile, inventory, weather, energy, re
 
           {tile.scavengeLeft > 0 && (tile.type === 'search' || tile.type === 'tree') && <ScavengeOverlay tile={tile} />}
 
+          {tile.type === 'track' && tile.isBroken && (() => {
+            const woodCost = GAME_CONFIG.MAP.BROKEN_TRACKS.REPAIR_COST_WOOD;
+            const stoneCost = GAME_CONFIG.MAP.BROKEN_TRACKS.REPAIR_COST_STONE;
+            const woodCount = inventory.find(i => i?.type === 'wood')?.count || 0;
+            const stoneCount = inventory.find(i => i?.type === 'stone')?.count || 0;
+            return <BrokenTrackOverlay hasWood={woodCount >= woodCost} hasStone={stoneCount >= stoneCost} />;
+          })()}
+
           {/* Train NPC Count Badge */}
           {tile.type === 'train' && rescuedNPCs > 0 && (
             <div className="absolute -bottom-2 -right-2 bg-blue-950 text-blue-300 text-[10px] px-1.5 py-0.5 rounded-full font-bold border border-blue-700 z-20 shadow-sm font-mono">
               {rescuedNPCs}
+            </div>
+          )}
+
+          {/* Blocked Overlay */}
+          {isBlocked && (
+            <div className="absolute inset-0 z-30 bg-black/40 flex items-center justify-center rounded-xl backdrop-blur-[1px]">
+              <Ban className="text-red-500/80 drop-shadow-md" size={24} />
             </div>
           )}
 

@@ -11,6 +11,7 @@ interface StatusFooterProps {
     avatar: string;
     attack: number;
     isExhausted?: boolean;
+    onRest: () => void;
 }
 
 export const StatusFooter: React.FC<StatusFooterProps> = ({
@@ -36,7 +37,7 @@ export const StatusFooter: React.FC<StatusFooterProps> = ({
                     {/* HP */}
                     <div className="w-full">
                         <div className="flex justify-between text-[10px] mb-1 uppercase tracking-widest font-bold text-stone-500">
-                            <span className="flex items-center gap-1 text-red-400"><Heart size={10} /> Vitality</span>
+                            <span className="flex items-center gap-1 text-red-400"><Heart size={10} /> health</span>
                             <span>{hp}/{maxHp}</span>
                         </div>
                         <div className="h-2 bg-stone-950 rounded-full border border-stone-800 overflow-hidden">

@@ -13,7 +13,7 @@ interface HeaderProps {
   pressure: number;
   targetPressure: number;
   viewState: ViewState;
-  rescuedNPCs: { buff: 'stamina' | 'vitality' | 'attack' }[];
+  rescuedNPCs: { buff: 'stamina' | 'health' | 'attack' }[];
   maxTrainCapacity: number;
   onAddFuel: (type: 'wood' | 'charcoal') => void;
   onDepart: () => void;
@@ -39,10 +39,8 @@ export const Header: React.FC<HeaderProps> = ({
   const woodCount = getCount('wood');
   const charcoalCount = getCount('charcoal');
 
-  // Calculate enemy spawn rate (same formula as in map.ts)
-  const sanModifier = san * 0.2;
-  const baseEnemyRate = GAME_CONFIG.MAP.PROBS.DANGER.ENEMY_BASE + (station * GAME_CONFIG.MAP.PROBS.DANGER.ENEMY_SCALE);
-  const enemySpawnRate = ((baseEnemyRate + sanModifier) * 100).toFixed(1);
+  // Calculate dice count
+  const diceCount = 1 + Math.floor(san / 100);
 
   return (
     <header className="bg-stone-900 border-b border-stone-800 p-3 shadow-xl z-20 shrink-0">
@@ -60,7 +58,7 @@ export const Header: React.FC<HeaderProps> = ({
               <span className="font-bold text-purple-400 text-sm">SAN: {san}</span>
             </div>
             <div className="bg-stone-800/50 px-3 py-1 rounded-full border border-red-700/50 flex items-center gap-2">
-              <span className="font-bold text-red-400 text-[10px] uppercase tracking-wider">Enemy Rate: {enemySpawnRate}%</span>
+              <span className="font-bold text-red-400 text-[10px] uppercase tracking-wider">Danger Dice: {diceCount}</span>
             </div>
             <div className="flex gap-2 items-center text-stone-400 bg-stone-800/50 px-2 py-1 rounded-full">
               {weather === 'sunny' ? <Flame size={12} className="text-amber-400" /> :

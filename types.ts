@@ -39,7 +39,7 @@ export interface TileConfig {
   tool?: ToolType;
 }
 
-export type NPCBuff = 'stamina' | 'vitality' | 'attack';
+export type NPCBuff = 'stamina' | 'health' | 'attack';
 
 export interface Tile {
   id: string;
@@ -59,6 +59,7 @@ export interface Tile {
   npcBuff?: NPCBuff;
   rescueProgress?: number;
   maxRescueProgress?: number;
+  isBroken?: boolean;
 }
 
 export interface Recipe {

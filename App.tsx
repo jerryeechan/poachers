@@ -15,7 +15,8 @@ import { Tile } from './components/Tile';
 import { ShopOverlay } from './components/ShopOverlay';
 import { RestReportModal } from './components/RestReportModal';
 import { GameOverModal } from './components/GameOverModal';
-import { EnemySpawnAnimation } from './components/EnemySpawnAnimation';
+import { EnemySpawnAnimation } from './components/EnemySpawnAnimation'; // Kept but unused
+import { DiceSpawnAnimation } from './components/DiceSpawnAnimation';
 import { Header } from './components/Header';
 import { StatusFooter } from './components/StatusFooter';
 import { WorkshopPanel } from './components/WorkshopPanel';
@@ -39,7 +40,7 @@ export default function App() {
   const [carriageLevel, setCarriageLevel] = useState(0);
 
   // Train Capacity & Rescued NPCs
-  const [rescuedNPCs, setRescuedNPCs] = useState<{ buff: 'stamina' | 'vitality' | 'attack' }[]>([]);
+  const [rescuedNPCs, setRescuedNPCs] = useState<{ buff: 'stamina' | 'health' | 'attack' }[]>([]);
   const maxTrainCapacity = GAME_CONFIG.MAP.NPC.TRAIN_CAPACITY_BASE;
 
   // Statistics for Score
@@ -64,7 +65,7 @@ export default function App() {
   const [restReport, setRestReport] = useState<RestReport | null>(null);
   const [showEnemySpawnAnimation, setShowEnemySpawnAnimation] = useState(false);
   const [enemySpawnRate, setEnemySpawnRate] = useState(0);
-  const [spawnResults, setSpawnResults] = useState<boolean[]>([]);
+  const [diceRolls, setDiceRolls] = useState<number[]>([]);
 
   // Computed Properties
   const currentLoad = inventory.reduce((acc, item) => acc + (item ? item.count : 0), 0);
@@ -72,11 +73,11 @@ export default function App() {
 
   // Apply NPC Buffs
   const staminaBuffs = rescuedNPCs.filter(npc => npc.buff === 'stamina').length;
-  const vitalityBuffs = rescuedNPCs.filter(npc => npc.buff === 'vitality').length;
+  const healthBuffs = rescuedNPCs.filter(npc => npc.buff === 'health').length;
   const attackBuffs = rescuedNPCs.filter(npc => npc.buff === 'attack').length;
 
   const buffedMaxEnergy = MAX_ENERGY + (staminaBuffs * 5);
-  const buffedMaxHp = MAX_HP + (vitalityBuffs * 5);
+  const buffedMaxHp = MAX_HP + (healthBuffs * 5);
   const buffedAttack = GAME_CONFIG.ACTIONS.PLAYER_BASE_DMG + attackBuffs;
 
   // --- Helpers ---
@@ -202,8 +203,8 @@ export default function App() {
   // --- Actions ---
   const handleTileClick = (tile: TileType) => {
     if (viewState === 'gameover') return;
-    if (!tile.revealed || tile.type === 'void' || tile.type === 'track') return;
-    if (tile.cleared && !(tile.type === 'search' && tile.scavengeLeft > 0)) return;
+    if (!tile.revealed || tile.type === 'void' || (tile.type === 'track' && !tile.isBroken)) return;
+    if (tile.cleared && !(tile.type === 'search' && tile.scavengeLeft > 0) && !(tile.type === 'track' && tile.isBroken)) return;
 
     const config = TILE_TYPES[tile.type.toUpperCase()];
     let cost = weather === 'windy' ? GAME_CONFIG.ACTIONS.COST_WINDY : GAME_CONFIG.ACTIONS.COST_BASE;
@@ -236,6 +237,35 @@ export default function App() {
 
     if (energy < cost) {
       addLog("Exhausted! You need to Rest.", "error");
+      return;
+    }
+
+    // Broken Track Repair Logic
+    if (tile.type === 'track' && tile.isBroken) {
+      const woodCost = GAME_CONFIG.MAP.BROKEN_TRACKS.REPAIR_COST_WOOD;
+      const stoneCost = GAME_CONFIG.MAP.BROKEN_TRACKS.REPAIR_COST_STONE;
+
+      const woodItem = inventory.find(i => i?.type === 'wood');
+      const stoneItem = inventory.find(i => i?.type === 'stone');
+      const woodCount = woodItem ? woodItem.count : 0;
+      const stoneCount = stoneItem ? stoneItem.count : 0;
+
+      if (woodCount < woodCost || stoneCount < stoneCost) {
+        addLog(`Need ${woodCost} Wood and ${stoneCost} Stone to repair!`, "error");
+        return;
+      }
+
+      setEnergy(prev => prev - cost);
+
+      // Deduct resources
+      let tempInv = [...inventory];
+      tempInv = removeFromInventory(tempInv, 'wood', woodCost).newInv;
+      tempInv = removeFromInventory(tempInv, 'stone', stoneCost).newInv;
+      setInventory(tempInv);
+
+      // Fix track
+      setGrid(prev => prev.map(t => t.id === tile.id ? { ...t, isBroken: false, effect: 'pop' } : t));
+      addLog("Track repaired!", "success");
       return;
     }
 
@@ -388,7 +418,7 @@ export default function App() {
 
           const buffNames = {
             'stamina': 'Max Stamina',
-            'vitality': 'Max HP',
+            'health': 'Max HP',
             'attack': 'Attack Power'
           };
 
@@ -443,33 +473,16 @@ export default function App() {
   };
 
   const handleRest = () => {
-    // Calculate enemy spawn rate for animation
-    const sanModifier = gameStats.san * 0.2;
-    const baseEnemyRate = GAME_CONFIG.MAP.PROBS.DANGER.ENEMY_BASE + (station * GAME_CONFIG.MAP.PROBS.DANGER.ENEMY_SCALE);
-    const spawnRate = (baseEnemyRate + sanModifier) * 100;
+    // Dice Logic: 1 die base + 1 per 100 Sanity
+    const diceCount = 1 + Math.floor(gameStats.san / 100);
+    const rolls: number[] = [];
 
-    // Pre-calculate results to ensure animation matches logic
-    const results: boolean[] = [];
-    let remainingRate = spawnRate;
-
-    while (remainingRate >= 100) {
-      results.push(true); // Guaranteed spawn
-      remainingRate -= 100;
+    for (let i = 0; i < diceCount; i++) {
+      // Roll 1-6
+      rolls.push(Math.floor(Math.random() * 6) + 1);
     }
 
-    if (remainingRate > 0) {
-      const roll = Math.random() * 100;
-      results.push(roll < remainingRate);
-    } else if (results.length === 0) {
-      // If rate is 0 (shouldn't happen with base rate but safe to handle), push one fail check if we want to show animation?
-      // Or maybe just don't show animation if rate is 0? 
-      // Current logic shows animation if rate > 0.
-      // If rate is exactly 100, remaining is 0. Loop runs once. results=[true]. Correct.
-      // If rate is 200, remaining is 0. Loop runs twice. results=[true, true]. Correct.
-    }
-
-    setSpawnResults(results);
-    setEnemySpawnRate(spawnRate);
+    setDiceRolls(rolls);
     setShowEnemySpawnAnimation(true);
   };
 
@@ -491,7 +504,7 @@ export default function App() {
 
     // Increment day and sanity
     setDay(prev => prev + 1);
-    setGameStats(prev => ({ ...prev, san: prev.san + 1 }));
+    setGameStats(prev => ({ ...prev, san: prev.san + 50 }));
 
     // Handle spawned enemies from enemy spawn rate
     if (restReport.spawnedEnemies && restReport.spawnedEnemies.length > 0) {
@@ -600,6 +613,12 @@ export default function App() {
   };
 
   const depart = () => {
+    // Check for broken tracks
+    if (grid.some(t => t.type === 'track' && t.isBroken)) {
+      addLog("Cannot depart! Tracks are broken.", "error");
+      return;
+    }
+
     setViewState('shop');
     addLog("Arrived at Trading Post...", "important");
   };
@@ -787,17 +806,32 @@ export default function App() {
           {/* Grid Container */}
           <div className="flex-1 overflow-auto p-4 flex items-center justify-center custom-scrollbar">
             <div className="grid grid-cols-8 gap-2 sm:gap-3 p-4 bg-stone-900 rounded-2xl shadow-2xl border border-stone-800">
-              {grid.map((tile) => (
-                <Tile
-                  key={tile.id}
-                  tile={tile}
-                  inventory={inventory}
-                  weather={weather}
-                  energy={energy}
-                  rescuedNPCs={rescuedNPCs.length}
-                  onTileClick={handleTileClick}
-                />
-              ))}
+              {grid.map((tile) => {
+                // Check for adjacent enemies
+                let isBlocked = false;
+                if (tile.type !== 'enemy') {
+                  const neighbors = [
+                    grid.find(t => t.x === tile.x && t.y === tile.y - 1), // Up
+                    grid.find(t => t.x === tile.x && t.y === tile.y + 1), // Down
+                    grid.find(t => t.x === tile.x - 1 && t.y === tile.y), // Left
+                    grid.find(t => t.x === tile.x + 1 && t.y === tile.y)  // Right
+                  ];
+                  isBlocked = neighbors.some(n => n && n.type === 'enemy' && n.revealed && !n.cleared);
+                }
+
+                return (
+                  <Tile
+                    key={tile.id}
+                    tile={tile}
+                    inventory={inventory}
+                    weather={weather}
+                    energy={energy}
+                    rescuedNPCs={rescuedNPCs.length}
+                    onTileClick={handleTileClick}
+                    isBlocked={isBlocked}
+                  />
+                );
+              })}
             </div>
           </div>
 
@@ -831,11 +865,11 @@ export default function App() {
         />
       </main>
 
-      {/* Enemy Spawn Animation */}
+      {/* Enemy Spawn Animation (Dice) */}
       {showEnemySpawnAnimation && (
-        <EnemySpawnAnimation
-          enemySpawnRate={enemySpawnRate}
-          spawnResults={spawnResults}
+        <DiceSpawnAnimation
+          diceCount={1 + Math.floor(gameStats.san / 100)}
+          diceRolls={diceRolls}
           onComplete={handleEnemySpawnComplete}
         />
       )}

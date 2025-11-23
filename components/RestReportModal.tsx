@@ -17,7 +17,7 @@ export const RestReportModal: React.FC<RestReportModalProps> = ({ report, onClos
 
         <div className="space-y-4 text-sm font-mono">
           <div className="flex justify-between items-center p-2 bg-stone-950/50 rounded border border-stone-800/50">
-            <span className="text-stone-400">Vitality Restored</span>
+            <span className="text-stone-400">health Restored</span>
             <span className="text-emerald-400 font-bold">HP +{report.heal}</span>
           </div>
 
