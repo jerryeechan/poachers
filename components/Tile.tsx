@@ -78,11 +78,11 @@ export const Tile: React.FC<TileProps> = ({ tile, inventory, weather, energy, on
 
       // Interaction States
       if (isInteractable) {
-        if (hasEnergy) {
-          // Interactive & Affordable
+        if (hasEnergy && hasTool) {
+          // Interactive & Affordable & Has Tool
           containerClass += ' cursor-pointer hover:scale-105 hover:border-white/40 hover:shadow-xl hover:z-10 active:scale-95';
         } else {
-          // Interactive but No Energy
+          // Interactive but No Energy OR No Tool
           containerClass += ' cursor-not-allowed opacity-80 grayscale-[0.5]';
         }
       } else {

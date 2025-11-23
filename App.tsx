@@ -62,7 +62,7 @@ export default function App() {
 
   // --- Helpers ---
   const addLog = useCallback((text: string, type: LogEntry['type'] = 'neutral') => {
-    setLogs(prev => [{ id: Date.now() + Math.random(), text, type }, ...prev].slice(15));
+    setLogs(prev => [{ id: Date.now() + Math.random(), text, type }, ...prev].slice(0, 15));
   }, []);
 
   // Inventory Helpers
@@ -197,7 +197,12 @@ export default function App() {
     if (config.tool) {
       const tool = findTool(config.tool as ItemType);
       if (!tool) {
-        addLog(`Requires ${config.tool}!`, "error");
+        const hasItem = inventory.some(i => i?.type === config.tool);
+        if (hasItem) {
+          addLog(`Your ${config.tool} is broken!`, "error");
+        } else {
+          addLog(`Requires ${config.tool}!`, "error");
+        }
         return;
       }
     }
