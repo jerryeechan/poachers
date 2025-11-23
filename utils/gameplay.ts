@@ -13,6 +13,12 @@ export const getAvatarFace = (hp: number, maxHp: number, energy: number, maxEner
   return '🤠';
 };
 
+export const calculateEnemyLevel = (station: number, san: number): number => {
+  const config = GAME_CONFIG.MAP.ENEMIES.LEVEL_CONFIG;
+  const level = config.BASE + (station * config.STATION_MULT) + (san * config.SANITY_MULT);
+  return Math.floor(level);
+};
+
 export const calculateRestOutcome = (
   grid: TileType[],
   pressure: number,
@@ -41,16 +47,19 @@ export const calculateRestOutcome = (
   const spawnedEnemies: { id: string; attack: number; hp: number }[] = [];
 
   // Spawn enemies based on spawn rate
+  const level = calculateEnemyLevel(station, san);
+
   for (let i = 0; i < enemySpawnCount && safeTiles.length > 0; i++) {
     const randomIndex = Math.floor(Math.random() * safeTiles.length);
     const targetTile = safeTiles.splice(randomIndex, 1)[0]; // Remove from array to avoid duplicate spawns
 
     const attack = Math.floor(Math.random() * GAME_CONFIG.MAP.ENEMIES.ATTACK_VAR) +
       GAME_CONFIG.MAP.ENEMIES.ATTACK_MIN +
-      Math.floor(station * GAME_CONFIG.MAP.ENEMIES.ATTACK_STATION_MULT);
+      level;
+
     const hp = Math.floor(Math.random() * GAME_CONFIG.MAP.ENEMIES.HP_VAR) +
       GAME_CONFIG.MAP.ENEMIES.HP_MIN +
-      Math.floor(station * GAME_CONFIG.MAP.ENEMIES.HP_STATION_MULT);
+      (level * 2);
 
     spawnedEnemies.push({ id: targetTile.id, attack, hp });
   }

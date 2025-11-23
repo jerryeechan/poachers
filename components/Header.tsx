@@ -60,14 +60,14 @@ export const Header: React.FC<HeaderProps> = ({
             <div className="bg-stone-800/50 px-3 py-1 rounded-full border border-red-700/50 flex items-center gap-2">
               <span className="font-bold text-red-400 text-[10px] uppercase tracking-wider">Danger Dice: {diceCount}</span>
             </div>
-            <div className="flex gap-2 items-center text-stone-400 bg-stone-800/50 px-2 py-1 rounded-full">
+            {/* <div className="flex gap-2 items-center text-stone-400 bg-stone-800/50 px-2 py-1 rounded-full">
               {weather === 'sunny' ? <Flame size={12} className="text-amber-400" /> :
                 weather === 'rain' ? <Droplets size={12} className="text-blue-400" /> :
                   <Wind size={12} className="text-slate-400" />}
               <span className="uppercase text-[10px] font-bold tracking-wider">
                 {weather === 'sunny' ? 'Clear' : weather === 'rain' ? 'Rain' : 'Windy'}
               </span>
-            </div>
+            </div> */}
           </div>
           <div className="flex items-center gap-2">
             {/* Train Capacity */}

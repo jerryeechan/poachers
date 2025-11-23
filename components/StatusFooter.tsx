@@ -1,5 +1,6 @@
 import React from 'react';
-import { Heart, Zap, Package, Tent, Sword } from 'lucide-react';
+import { Heart, Zap, Package, Tent, Sword, ScrollText } from 'lucide-react';
+import { LogEntry } from '../types';
 
 interface StatusFooterProps {
     hp: number;
@@ -12,6 +13,8 @@ interface StatusFooterProps {
     attack: number;
     isExhausted?: boolean;
     onRest: () => void;
+    logs?: LogEntry[];
+    onLogClick?: () => void;
 }
 
 export const StatusFooter: React.FC<StatusFooterProps> = ({
@@ -24,8 +27,13 @@ export const StatusFooter: React.FC<StatusFooterProps> = ({
     avatar,
     attack,
     onRest,
-    isExhausted
+    isExhausted,
+    logs,
+    onLogClick
 }) => {
+    // Get the last log entry
+    const lastLog = logs && logs.length > 0 ? logs[0] : null;
+
     return (
         <div className="bg-stone-900 border-t border-stone-800 p-4 flex items-center justify-between gap-4 shrink-0 shadow-[0_-10px_20px_rgba(0,0,0,0.5)] z-10">
             <div className="flex gap-6 items-center">
@@ -78,6 +86,27 @@ export const StatusFooter: React.FC<StatusFooterProps> = ({
                     </div>
                 </div>
             </div>
+
+            {/* Last Log Entry */}
+            {lastLog && (
+                <button
+                    onClick={onLogClick}
+                    className="flex-1 max-w-md bg-stone-950/80 border border-stone-700 rounded-lg px-3 py-2 hover:bg-stone-950 hover:border-stone-600 transition-all cursor-pointer group"
+                    title="Click to view all logs"
+                >
+                    <div className="flex items-center gap-2">
+                        <ScrollText size={14} className="text-stone-500 group-hover:text-stone-400 transition-colors flex-shrink-0" />
+                        <div className={`text-xs font-mono truncate ${lastLog.type === 'error' ? 'text-red-400' :
+                            lastLog.type === 'success' ? 'text-emerald-400' :
+                                lastLog.type === 'important' ? 'text-amber-400' :
+                                    lastLog.type === 'warning' ? 'text-orange-300' :
+                                        'text-stone-400'
+                            }`}>
+                            {lastLog.text}
+                        </div>
+                    </div>
+                </button>
+            )}
 
             <button
                 onClick={onRest}

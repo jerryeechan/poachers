@@ -1,4 +1,5 @@
 import React from 'react';
+import { Hammer } from 'lucide-react';
 import { Inventory, Item } from '../types';
 import { ITEM_CONFIG, INVENTORY_SIZE } from '../constants';
 
@@ -6,23 +7,35 @@ interface InventoryBarProps {
     inventory: Inventory;
     selectedSlot?: number;
     onSlotClick?: (index: number) => void;
+    onCraftClick?: () => void;
 }
 
-export const InventoryBar: React.FC<InventoryBarProps> = ({ inventory, selectedSlot, onSlotClick }) => {
+export const InventoryBar: React.FC<InventoryBarProps> = ({ inventory, selectedSlot, onSlotClick, onCraftClick }) => {
     // Create an array of size INVENTORY_SIZE to map over
     const slots = Array.from({ length: INVENTORY_SIZE }, (_, i) => inventory[i] || null);
 
     return (
-        <div className="flex items-center justify-center gap-1 p-2 bg-stone-900/90 border-t border-stone-800 backdrop-blur-sm">
-            {slots.map((item, index) => (
-                <InventorySlot
-                    key={index}
-                    item={item}
-                    index={index}
-                    isSelected={selectedSlot === index}
-                    onClick={() => onSlotClick && onSlotClick(index)}
-                />
-            ))}
+        <div className="flex items-center justify-center gap-2 p-2 bg-stone-900/90 border-t border-stone-800 backdrop-blur-sm">
+            <div className="flex items-center gap-1">
+                {slots.map((item, index) => (
+                    <InventorySlot
+                        key={index}
+                        item={item}
+                        index={index}
+                        isSelected={selectedSlot === index}
+                        onClick={() => onSlotClick && onSlotClick(index)}
+                    />
+                ))}
+            </div>
+
+            {/* Craft Button */}
+            <button
+                onClick={onCraftClick}
+                className="w-10 h-10 sm:w-12 sm:h-12 bg-amber-900 hover:bg-amber-800 border-2 border-amber-700 hover:border-amber-600 rounded-md flex items-center justify-center transition-all shadow-lg hover:shadow-amber-900/50"
+                title="Open Field Workshop"
+            >
+                <Hammer className="w-5 h-5 sm:w-6 sm:h-6 text-amber-200" />
+            </button>
         </div>
     );
 };
@@ -67,7 +80,7 @@ const InventorySlot: React.FC<InventorySlotProps> = ({ item, index, isSelected, 
                         <div className="absolute bottom-1 left-1 right-1 h-1 bg-stone-800 rounded-full overflow-hidden">
                             <div
                                 className={`h-full ${(item.durability / (item.maxDurability || 5)) < 0.3 ? 'bg-red-500' :
-                                        (item.durability / (item.maxDurability || 5)) < 0.6 ? 'bg-yellow-500' : 'bg-green-500'
+                                    (item.durability / (item.maxDurability || 5)) < 0.6 ? 'bg-yellow-500' : 'bg-green-500'
                                     }`}
                                 style={{ width: `${(item.durability / (item.maxDurability || 5)) * 100}%` }}
                             />

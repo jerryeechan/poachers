@@ -14,7 +14,7 @@ export interface Item {
   maxDurability?: number;
 }
 
-export type ItemType = 'wood' | 'stone' | 'charcoal' | 'axe' | 'pickaxe' | 'bow';
+export type ItemType = 'wood' | 'stone' | 'charcoal' | 'axe' | 'pickaxe' | 'bow' | 'key';
 
 export type Inventory = (Item | null)[];
 

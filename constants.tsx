@@ -1,6 +1,6 @@
 import {
   Train, Trees, MoreHorizontal, Mountain, Skull, Search,
-  Axe, Pickaxe, Crosshair, Flame, Box, Gem, User
+  Axe, Pickaxe, Crosshair, Flame, Box, Gem, User, Key
 } from 'lucide-react';
 import { Recipe, TileConfig, TileTypeStr, ItemType } from './types';
 
@@ -19,6 +19,7 @@ export const ITEM_CONFIG: Record<ItemType, { name: string; icon: any; maxStack: 
   axe: { name: 'Axe', icon: Axe, maxStack: 1, desc: 'For chopping trees' },
   pickaxe: { name: 'Pickaxe', icon: Pickaxe, maxStack: 1, desc: 'For mining rocks' },
   bow: { name: 'Bow', icon: Crosshair, maxStack: 1, desc: 'For hunting enemies' },
+  key: { name: 'Key', icon: Key, maxStack: 10, desc: 'Opens locked chests' },
 };
 
 export const GAME_CONFIG = {
@@ -39,8 +40,8 @@ export const GAME_CONFIG = {
   TRAIN: {
     PRESSURE_BASE: 50,
     PRESSURE_PER_STATION: 20,
-    FUEL_GAIN_WOOD: 5,
-    FUEL_GAIN_CHARCOAL: 15,
+    FUEL_GAIN_WOOD: 2,
+    FUEL_GAIN_CHARCOAL: 10,
     DECAY_ON_REST: 10,
   },
   MAP: {
@@ -69,10 +70,18 @@ export const GAME_CONFIG = {
       EMPTY_CHANCE_STONE_THRESHOLD: 0.80,
     },
     ENEMIES: {
-      ATTACK_MIN: 1, ATTACK_VAR: 3, ATTACK_STATION_MULT: 0.5,
-      HP_MIN: 1, HP_VAR: 4, HP_STATION_MULT: 1,
+      ATTACK_MIN: 1, ATTACK_VAR: 2,
+      HP_MIN: 1, HP_VAR: 2,
+      LEVEL_CONFIG: {
+        BASE: 0,
+        STATION_MULT: 0.5,
+        SANITY_MULT: 0.01,
+      },
       LOOT_WOOD_MIN: 1, LOOT_WOOD_VAR: 3,
       LOOT_STONE_MIN: 1, LOOT_STONE_VAR: 2,
+      LOOT_GOLD_MIN: 1, LOOT_GOLD_VAR: 5,
+      LOOT_KEY_CHANCE_BASE: 0.05,
+      LOOT_KEY_CHANCE_LEVEL_MULT: 0.01,
     },
     BROKEN_TRACKS: {
       BASE: 1,

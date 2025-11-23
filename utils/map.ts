@@ -1,6 +1,7 @@
 
 import { GAME_CONFIG, GRID_SIZE } from '../constants';
 import { Tile as TileType } from '../types';
+import { calculateEnemyLevel } from './gameplay';
 
 /**
  * A tile allows vision to pass through if it is revealed AND is transparent.
@@ -123,12 +124,13 @@ export const generateLevel = (station: number, san: number = 0): TileType[] => {
             type = 'rock';
           } else if (rand < (probs.ENEMY_BASE + (station * probs.ENEMY_SCALE))) {
             type = 'enemy';
+            const level = calculateEnemyLevel(station, san);
             attack = Math.floor(Math.random() * GAME_CONFIG.MAP.ENEMIES.ATTACK_VAR) +
               GAME_CONFIG.MAP.ENEMIES.ATTACK_MIN +
-              Math.floor(station * GAME_CONFIG.MAP.ENEMIES.ATTACK_STATION_MULT);
+              level;
             hp = Math.floor(Math.random() * GAME_CONFIG.MAP.ENEMIES.HP_VAR) +
               GAME_CONFIG.MAP.ENEMIES.HP_MIN +
-              Math.floor(station * GAME_CONFIG.MAP.ENEMIES.HP_STATION_MULT);
+              (level * 2);
           } else {
             scavengeLeft = Math.floor(Math.random() * GAME_CONFIG.MAP.LOOT.SCAVENGE_VAR) + GAME_CONFIG.MAP.LOOT.SCAVENGE_MIN;
           }

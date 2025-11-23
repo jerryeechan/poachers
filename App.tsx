@@ -19,12 +19,13 @@ import { EnemySpawnAnimation } from './components/EnemySpawnAnimation'; // Kept 
 import { DiceSpawnAnimation } from './components/DiceSpawnAnimation';
 import { Header } from './components/Header';
 import { StatusFooter } from './components/StatusFooter';
-import { WorkshopPanel } from './components/WorkshopPanel';
+import { WorkshopModal } from './components/WorkshopModal';
+import { LogModal } from './components/LogModal';
 import { InventoryBar } from './components/InventoryBar';
 
 // Utilities
 import { generateLevel, revealNeighbors } from './utils/map';
-import { getAvatarFace, calculateRestOutcome } from './utils/gameplay';
+import { getAvatarFace, calculateRestOutcome, calculateEnemyLevel } from './utils/gameplay';
 
 export default function App() {
   // --- Global State ---
@@ -66,6 +67,8 @@ export default function App() {
   const [showEnemySpawnAnimation, setShowEnemySpawnAnimation] = useState(false);
   const [enemySpawnRate, setEnemySpawnRate] = useState(0);
   const [diceRolls, setDiceRolls] = useState<number[]>([]);
+  const [showWorkshopModal, setShowWorkshopModal] = useState(false);
+  const [showLogModal, setShowLogModal] = useState(false);
 
   // Computed Properties
   const currentLoad = inventory.reduce((acc, item) => acc + (item ? item.count : 0), 0);
@@ -334,10 +337,26 @@ export default function App() {
         setGameStats(prev => ({ ...prev, enemiesDefeated: prev.enemiesDefeated + 1 }));
 
         // Loot
+        // Loot
         const woodAmt = Math.floor(Math.random() * GAME_CONFIG.MAP.ENEMIES.LOOT_WOOD_VAR) + GAME_CONFIG.MAP.ENEMIES.LOOT_WOOD_MIN;
         const stoneAmt = Math.floor(Math.random() * GAME_CONFIG.MAP.ENEMIES.LOOT_STONE_VAR) + GAME_CONFIG.MAP.ENEMIES.LOOT_STONE_MIN;
         if (woodAmt > 0) loot.push({ type: 'wood', count: woodAmt });
         if (stoneAmt > 0) loot.push({ type: 'stone', count: stoneAmt });
+
+        // Gold
+        const goldAmt = Math.floor(Math.random() * GAME_CONFIG.MAP.ENEMIES.LOOT_GOLD_VAR) + GAME_CONFIG.MAP.ENEMIES.LOOT_GOLD_MIN;
+        if (goldAmt > 0) {
+          setGold(prev => prev + goldAmt);
+          dropMsg += ` (+${goldAmt} G)`;
+        }
+
+        // Key
+        const level = calculateEnemyLevel(station, gameStats.san);
+        const keyChance = GAME_CONFIG.MAP.ENEMIES.LOOT_KEY_CHANCE_BASE + (level * GAME_CONFIG.MAP.ENEMIES.LOOT_KEY_CHANCE_LEVEL_MULT);
+        if (Math.random() < keyChance) {
+          loot.push({ type: 'key', count: 1 });
+          dropMsg += ` (Found Key!)`;
+        }
 
         // Player Damage Check
         if (isUsingBow) {
@@ -840,6 +859,7 @@ export default function App() {
               inventory={inventory}
               selectedSlot={selectedSlot}
               onSlotClick={handleSlotClick}
+              onCraftClick={() => setShowWorkshopModal(true)}
             />
           </div>
 
@@ -854,15 +874,10 @@ export default function App() {
             attack={selectedSlot !== undefined && inventory[selectedSlot]?.type === 'bow' ? GAME_CONFIG.ACTIONS.BOW_DMG : buffedAttack}
             onRest={handleRest}
             isExhausted={isExhausted}
+            logs={logs}
+            onLogClick={() => setShowLogModal(true)}
           />
         </section>
-
-        <WorkshopPanel
-          inventory={inventory}
-          logs={logs}
-          energy={energy}
-          onCraft={craftItem}
-        />
       </main>
 
       {/* Enemy Spawn Animation (Dice) */}
@@ -876,6 +891,24 @@ export default function App() {
 
       {/* Rest Report Modal */}
       {restReport && <RestReportModal report={restReport} onClose={applyRestResults} />}
+
+      {/* Workshop Modal */}
+      {showWorkshopModal && (
+        <WorkshopModal
+          inventory={inventory}
+          energy={energy}
+          onCraft={craftItem}
+          onClose={() => setShowWorkshopModal(false)}
+        />
+      )}
+
+      {/* Log Modal */}
+      {showLogModal && (
+        <LogModal
+          logs={logs}
+          onClose={() => setShowLogModal(false)}
+        />
+      )}
 
     </div>
   );
