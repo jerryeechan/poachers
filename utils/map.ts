@@ -88,7 +88,7 @@ export const generateLevel = (station: number, san: number = 0): TileType[] => {
           cleared = true;
         } else {
           type = 'track';
-          revealed = true;
+          revealed = false;
           cleared = false;
         }
       } else {
