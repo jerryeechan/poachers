@@ -96,22 +96,26 @@ export const RECIPES: Record<string, Recipe> = {
   charcoal: {
     input: [{ type: 'wood', count: 3 }],
     output: { type: 'charcoal', count: 1 },
-    desc: "Convert wood to high-energy fuel"
+    desc: "Convert wood to high-energy fuel",
+    staminaCost: 1
   },
   axe: {
     input: [{ type: 'wood', count: 1 }, { type: 'stone', count: 1 }],
     output: { type: 'axe', count: 1, durability: MAX_TOOL_DURABILITY },
-    desc: "Logging (Durability 5)"
+    desc: "Logging (Durability 5)",
+    staminaCost: 1
   },
   pickaxe: {
     input: [{ type: 'wood', count: 5 }, { type: 'stone', count: 1 }],
     output: { type: 'pickaxe', count: 1, durability: MAX_TOOL_DURABILITY },
-    desc: "Mining (Durability 5)"
+    desc: "Mining (Durability 5)",
+    staminaCost: 1
   },
   bow: {
     input: [{ type: 'wood', count: 10 }, { type: 'stone', count: 5 }],
     output: { type: 'bow', count: 1, durability: MAX_TOOL_DURABILITY },
-    desc: "Weapon (Durability 5)"
+    desc: "Weapon (Durability 5)",
+    staminaCost: 1
   },
 };
 

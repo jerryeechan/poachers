@@ -6,12 +6,14 @@ import { RECIPES, MAX_TOOL_DURABILITY } from '../constants';
 interface WorkshopPanelProps {
     inventory: Inventory;
     logs: LogEntry[];
+    energy: number;
     onCraft: (key: string) => void;
 }
 
 export const WorkshopPanel: React.FC<WorkshopPanelProps> = ({
     inventory,
     logs,
+    energy,
     onCraft
 }) => {
     const logsEndRef = useRef<HTMLDivElement>(null);
@@ -38,9 +40,12 @@ export const WorkshopPanel: React.FC<WorkshopPanelProps> = ({
                     const outputType = recipe.output.type;
                     const existingTool = findTool(outputType);
                     const toolDurability = existingTool?.durability || 0;
+                    const staminaCost = recipe.staminaCost || 0;
 
                     // Check ingredients
-                    const canCraft = recipe.input.every(req => getCount(req.type) >= req.count);
+                    const hasIngredients = recipe.input.every(req => getCount(req.type) >= req.count);
+                    const hasEnergy = energy >= staminaCost;
+                    const canCraft = hasIngredients && hasEnergy;
 
                     return (
                         <div key={key} className={`
@@ -48,12 +53,19 @@ export const WorkshopPanel: React.FC<WorkshopPanelProps> = ({
                         ${toolDurability > 0 ? 'border-emerald-900/50 bg-emerald-950/10' : 'border-stone-800 hover:border-stone-600'}
                     `}>
                             <div className="flex justify-between items-center mb-2">
-                                <div className="flex items-center gap-2 text-sm font-bold text-stone-200">
-                                    {key === 'charcoal' ? <Flame size={16} className="text-orange-500" /> :
-                                        key === 'axe' ? <Axe size={16} className="text-emerald-500" /> :
-                                            key === 'pickaxe' ? <Pickaxe size={16} className="text-stone-400" /> :
-                                                <Sword size={16} className="text-red-400" />}
-                                    <span className="capitalize">{key}</span>
+                                <div className="flex flex-col">
+                                    <div className="flex items-center gap-2 text-sm font-bold text-stone-200">
+                                        {key === 'charcoal' ? <Flame size={16} className="text-orange-500" /> :
+                                            key === 'axe' ? <Axe size={16} className="text-emerald-500" /> :
+                                                key === 'pickaxe' ? <Pickaxe size={16} className="text-stone-400" /> :
+                                                    <Sword size={16} className="text-red-400" />}
+                                        <span className="capitalize">{key}</span>
+                                    </div>
+                                    {staminaCost > 0 && (
+                                        <span className={`text-[10px] ${hasEnergy ? 'text-stone-500' : 'text-red-500'}`}>
+                                            -{staminaCost} Energy
+                                        </span>
+                                    )}
                                 </div>
                                 <button
                                     onClick={() => onCraft(key)}
@@ -69,14 +81,7 @@ export const WorkshopPanel: React.FC<WorkshopPanelProps> = ({
                                 </button>
                             </div>
 
-                            {existingTool && existingTool.maxDurability && (
-                                <div className="w-full h-1.5 bg-stone-800 mt-2 rounded-full overflow-hidden">
-                                    <div
-                                        className={`h-full ${toolDurability <= 1 ? 'bg-red-500' : 'bg-emerald-500'} transition-all duration-300`}
-                                        style={{ width: `${(toolDurability / existingTool.maxDurability!) * 100}%` }}
-                                    ></div>
-                                </div>
-                            )}
+
 
                             <div className="mt-2 flex gap-3 text-[10px] text-stone-500 font-mono flex-wrap">
                                 {recipe.input.map((req, i) => {

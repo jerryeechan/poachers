@@ -57,6 +57,7 @@ export interface Recipe {
   input: { type: ItemType; count: number }[];
   output: { type: ItemType; count: number; durability?: number };
   desc: string;
+  staminaCost?: number;
 }
 
 export interface LogEntry {

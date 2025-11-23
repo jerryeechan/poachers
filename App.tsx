@@ -65,10 +65,10 @@ export default function App() {
     setLogs(prev => [{ id: Date.now() + Math.random(), text, type }, ...prev].slice(0, 15));
   }, []);
 
-  // Inventory Helpers
-  const addToInventory = (type: ItemType, count: number, durability?: number): number => {
+  // Inventory Helpers (Refactored to be pure-ish)
+  const addToInventory = (currentInv: Inventory, type: ItemType, count: number, durability?: number): { newInv: Inventory, added: number } => {
     let remaining = count;
-    const newInv = [...inventory];
+    const newInv = [...currentInv];
     const maxStack = ITEM_CONFIG[type].maxStack;
 
     // 1. Fill existing slots
@@ -99,17 +99,16 @@ export default function App() {
       }
     }
 
-    setInventory(newInv);
-    return count - remaining; // Return amount actually added
+    return { newInv, added: count - remaining };
   };
 
-  const removeFromInventory = (type: ItemType, count: number): boolean => {
+  const removeFromInventory = (currentInv: Inventory, type: ItemType, count: number): { newInv: Inventory, success: boolean } => {
     // Check if we have enough first
-    const total = inventory.reduce((acc, item) => (item?.type === type ? acc + item.count : acc), 0);
-    if (total < count) return false;
+    const total = currentInv.reduce((acc, item) => (item?.type === type ? acc + item.count : acc), 0);
+    if (total < count) return { newInv: currentInv, success: false };
 
     let remaining = count;
-    const newInv = [...inventory];
+    const newInv = [...currentInv];
 
     // Remove from last slots first (optional preference)
     for (let i = newInv.length - 1; i >= 0; i--) {
@@ -126,16 +125,15 @@ export default function App() {
       }
     }
 
-    setInventory(newInv);
-    return true;
+    return { newInv, success: true };
   };
 
   const findTool = (type: ItemType) => {
     return inventory.find(item => item?.type === type && (item.durability === undefined || item.durability > 0));
   };
 
-  const decreaseToolDurability = (type: ItemType) => {
-    const newInv = [...inventory];
+  const decreaseToolDurability = (currentInv: Inventory, type: ItemType): Inventory => {
+    const newInv = [...currentInv];
     const index = newInv.findIndex(item => item?.type === type && (item.durability === undefined || item.durability > 0));
 
     if (index !== -1) {
@@ -148,9 +146,9 @@ export default function App() {
         } else {
           newInv[index] = { ...item, durability: newDurability };
         }
-        setInventory(newInv);
       }
     }
+    return newInv;
   };
 
   // Check Game Over
@@ -221,9 +219,11 @@ export default function App() {
       setGrid(prev => prev.map(t => t.id === tile.id ? { ...t, effect: null } : t));
     }, 400);
 
+    let tempInv = [...inventory];
+
     // Tool Durability
     if (config.tool) {
-      decreaseToolDurability(config.tool as ItemType);
+      tempInv = decreaseToolDurability(tempInv, config.tool as ItemType);
     }
 
     const newGrid = [...grid];
@@ -253,7 +253,7 @@ export default function App() {
       const dmg = Math.max(1, targetTile.attack - (hasBow ? GAME_CONFIG.ACTIONS.BOW_BONUS_DMG : 0));
       setHp(prev => prev - dmg);
       if (hasBow) {
-        decreaseToolDurability('bow');
+        tempInv = decreaseToolDurability(tempInv, 'bow');
       }
 
       const woodAmt = Math.floor(Math.random() * GAME_CONFIG.MAP.ENEMIES.LOOT_WOOD_VAR) + GAME_CONFIG.MAP.ENEMIES.LOOT_WOOD_MIN;
@@ -284,7 +284,9 @@ export default function App() {
     // Add Resources with Capacity check
     let totalAdded = 0;
     loot.forEach(item => {
-      const added = addToInventory(item.type, item.count);
+      const res = addToInventory(tempInv, item.type, item.count);
+      tempInv = res.newInv;
+      const added = res.added;
       totalAdded += added;
       if (added < item.count) {
         addLog(`Inventory full! Discarded ${item.count - added} ${item.type}.`, "warning");
@@ -294,6 +296,8 @@ export default function App() {
       if (item.type === 'wood') setGameStats(prev => ({ ...prev, totalWood: prev.totalWood + added }));
       if (item.type === 'stone') setGameStats(prev => ({ ...prev, totalStone: prev.totalStone + added }));
     });
+
+    setInventory(tempInv);
 
     if (dropMsg) addLog(dropMsg, tile.type === 'enemy' ? 'warning' : 'success');
 
@@ -347,6 +351,12 @@ export default function App() {
 
   const craftItem = (key: string) => {
     const recipe = RECIPES[key];
+    const staminaCost = recipe.staminaCost || 0;
+
+    if (energy < staminaCost) {
+      addLog("Not enough energy to craft!", "error");
+      return;
+    }
 
     // Check Resources
     const canCraft = recipe.input.every(req => {
@@ -359,42 +369,52 @@ export default function App() {
       return;
     }
 
+    let tempInv = [...inventory];
+
     // Consume Resources
     recipe.input.forEach(req => {
-      removeFromInventory(req.type, req.count);
+      const res = removeFromInventory(tempInv, req.type, req.count);
+      if (res.success) tempInv = res.newInv;
     });
+
+    // Consume Energy
+    if (staminaCost > 0) {
+      setEnergy(prev => prev - staminaCost);
+    }
 
     // Add Output
     const output = recipe.output;
     // Check if we are repairing a tool (if it exists and has durability)
-    const existingToolIndex = inventory.findIndex(item => item?.type === output.type && item.maxDurability);
+    const existingToolIndex = tempInv.findIndex(item => item?.type === output.type && item.maxDurability);
 
     if (existingToolIndex !== -1 && output.durability) {
       // Repair
-      const newInv = [...inventory];
-      newInv[existingToolIndex] = {
-        ...newInv[existingToolIndex]!,
+      tempInv[existingToolIndex] = {
+        ...tempInv[existingToolIndex]!,
         durability: output.durability
       };
-      setInventory(newInv);
       addLog(`Repaired: ${key}`, "success");
     } else {
       // Craft new
-      const added = addToInventory(output.type, output.count, output.durability);
-      if (added < output.count) {
+      const res = addToInventory(tempInv, output.type, output.count, output.durability);
+      tempInv = res.newInv;
+      if (res.added < output.count) {
         addLog("Inventory full! Item lost.", "error");
       } else {
         addLog(`Crafted: ${key}`, "success");
       }
     }
 
+    setInventory(tempInv);
     setGameStats(prev => ({ ...prev, itemsCrafted: prev.itemsCrafted + 1 }));
   };
 
   const addFuel = (type: 'wood' | 'charcoal') => {
     if (pressure >= targetPressure) return;
 
-    if (removeFromInventory(type, 1)) {
+    const res = removeFromInventory(inventory, type, 1);
+    if (res.success) {
+      setInventory(res.newInv);
       const gain = type === 'wood' ? GAME_CONFIG.TRAIN.FUEL_GAIN_WOOD : GAME_CONFIG.TRAIN.FUEL_GAIN_CHARCOAL;
       setPressure(prev => Math.min(prev + gain, targetPressure));
     } else {
@@ -418,7 +438,9 @@ export default function App() {
 
   // Shop Functions
   const sellResource = (type: ItemType) => {
-    if (removeFromInventory(type, 1)) {
+    const res = removeFromInventory(inventory, type, 1);
+    if (res.success) {
+      setInventory(res.newInv);
       const price = type === 'charcoal' ? GAME_CONFIG.SHOP.SELL.CHARCOAL :
         type === 'wood' ? GAME_CONFIG.SHOP.SELL.WOOD :
           GAME_CONFIG.SHOP.SELL.STONE;
@@ -550,6 +572,7 @@ export default function App() {
         <WorkshopPanel
           inventory={inventory}
           logs={logs}
+          energy={energy}
           onCraft={craftItem}
         />
       </main>

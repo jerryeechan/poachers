@@ -63,13 +63,13 @@ const InventorySlot: React.FC<InventorySlotProps> = ({ item, index, isSelected, 
                     )}
 
                     {/* Durability Bar */}
-                    {item.maxDurability && item.durability !== undefined && (
+                    {(item.durability !== undefined) && (
                         <div className="absolute bottom-1 left-1 right-1 h-1 bg-stone-800 rounded-full overflow-hidden">
                             <div
-                                className={`h-full ${(item.durability / item.maxDurability) < 0.3 ? 'bg-red-500' :
-                                        (item.durability / item.maxDurability) < 0.6 ? 'bg-yellow-500' : 'bg-green-500'
+                                className={`h-full ${(item.durability / (item.maxDurability || 5)) < 0.3 ? 'bg-red-500' :
+                                        (item.durability / (item.maxDurability || 5)) < 0.6 ? 'bg-yellow-500' : 'bg-green-500'
                                     }`}
-                                style={{ width: `${(item.durability / item.maxDurability) * 100}%` }}
+                                style={{ width: `${(item.durability / (item.maxDurability || 5)) * 100}%` }}
                             />
                         </div>
                     )}
