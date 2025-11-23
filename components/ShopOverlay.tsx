@@ -1,14 +1,14 @@
 import React from 'react';
 import { ShoppingCart, ArrowRight, Trees, Mountain, Flame } from 'lucide-react';
-import { Resources } from '../types';
+import { Inventory, ItemType } from '../types';
 import { CARRIAGE_CAPACITY_BONUS, GAME_CONFIG } from '../constants';
 
 interface ShopOverlayProps {
   station: number;
   gold: number;
-  resources: Resources;
+  inventory: Inventory;
   carriageLevel: number;
-  onSell: (type: keyof Resources) => void;
+  onSell: (type: ItemType) => void;
   onBuyCarriage: () => void;
   onBuyHeal: () => void;
   onNextLevel: () => void;
@@ -17,7 +17,7 @@ interface ShopOverlayProps {
 export const ShopOverlay: React.FC<ShopOverlayProps> = ({
   station,
   gold,
-  resources,
+  inventory,
   carriageLevel,
   onSell,
   onBuyCarriage,
@@ -27,16 +27,21 @@ export const ShopOverlay: React.FC<ShopOverlayProps> = ({
   const buyCarriageCost = GAME_CONFIG.SHOP.BUY.CARRIAGE_BASE * (carriageLevel + 1);
   const healCost = GAME_CONFIG.SHOP.BUY.HEAL;
 
+  const getCount = (type: string) => inventory.reduce((acc, item) => (item?.type === type ? acc + item.count : acc), 0);
+  const woodCount = getCount('wood');
+  const stoneCount = getCount('stone');
+  const charcoalCount = getCount('charcoal');
+
   return (
     <div className="absolute inset-0 z-30 bg-stone-950/95 backdrop-blur-md flex flex-col items-center justify-center p-4 sm:p-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="max-w-3xl w-full bg-stone-900 border border-stone-800 rounded-2xl p-6 sm:p-8 shadow-2xl relative overflow-hidden">
         {/* Decorative Background Elements */}
         <div className="absolute top-0 right-0 w-64 h-64 bg-amber-500/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
-        
+
         <div className="flex justify-between items-center mb-8 border-b border-stone-800 pb-6 relative z-10">
           <div className="flex items-center gap-4">
             <div className="p-3 bg-stone-800 rounded-xl text-amber-500 shadow-inner border border-stone-700">
-               <ShoppingCart size={32} />
+              <ShoppingCart size={32} />
             </div>
             <div>
               <h2 className="text-3xl font-bold text-stone-100 tracking-tight">Trading Post</h2>
@@ -60,21 +65,21 @@ export const ShopOverlay: React.FC<ShopOverlayProps> = ({
               <button onClick={() => onSell('wood')} className="w-full flex justify-between items-center bg-stone-900 p-3 rounded-lg border border-stone-800 hover:border-stone-600 hover:bg-stone-800 transition-all group">
                 <div className="flex items-center gap-3">
                   <Trees size={18} className="text-emerald-600 group-hover:text-emerald-400 transition-colors" />
-                  <span className="text-stone-300">Wood ({resources.wood})</span>
+                  <span className="text-stone-300">Wood ({woodCount})</span>
                 </div>
                 <span className="text-amber-500 font-mono font-bold group-hover:scale-110 transition-transform">+{GAME_CONFIG.SHOP.SELL.WOOD} G</span>
               </button>
               <button onClick={() => onSell('stone')} className="w-full flex justify-between items-center bg-stone-900 p-3 rounded-lg border border-stone-800 hover:border-stone-600 hover:bg-stone-800 transition-all group">
                 <div className="flex items-center gap-3">
                   <Mountain size={18} className="text-slate-500 group-hover:text-slate-300 transition-colors" />
-                  <span className="text-stone-300">Stone ({resources.stone})</span>
+                  <span className="text-stone-300">Stone ({stoneCount})</span>
                 </div>
                 <span className="text-amber-500 font-mono font-bold group-hover:scale-110 transition-transform">+{GAME_CONFIG.SHOP.SELL.STONE} G</span>
               </button>
               <button onClick={() => onSell('charcoal')} className="w-full flex justify-between items-center bg-stone-900 p-3 rounded-lg border border-stone-800 hover:border-stone-600 hover:bg-stone-800 transition-all group">
                 <div className="flex items-center gap-3">
                   <Flame size={18} className="text-orange-600 group-hover:text-orange-400 transition-colors" />
-                  <span className="text-stone-300">Charcoal ({resources.charcoal})</span>
+                  <span className="text-stone-300">Charcoal ({charcoalCount})</span>
                 </div>
                 <span className="text-amber-500 font-mono font-bold group-hover:scale-110 transition-transform">+{GAME_CONFIG.SHOP.SELL.CHARCOAL} G</span>
               </button>
@@ -84,8 +89,8 @@ export const ShopOverlay: React.FC<ShopOverlayProps> = ({
           {/* Buy Section */}
           <div className="bg-stone-950/50 p-5 rounded-xl border border-stone-800/60">
             <h3 className="text-xs font-bold text-stone-400 mb-4 uppercase tracking-wider flex items-center gap-2">
-                <span className="w-2 h-2 bg-emerald-500 rounded-full"></span>
-                Upgrades & Services
+              <span className="w-2 h-2 bg-emerald-500 rounded-full"></span>
+              Upgrades & Services
             </h3>
             <div className="space-y-3">
               <button

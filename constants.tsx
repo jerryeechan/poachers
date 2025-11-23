@@ -1,14 +1,25 @@
 import {
-  Train, Trees, MoreHorizontal, Mountain, Skull, Search
+  Train, Trees, MoreHorizontal, Mountain, Skull, Search,
+  Axe, Pickaxe, Crosshair, Flame, Box, Gem
 } from 'lucide-react';
-import { Recipe, TileConfig, TileTypeStr } from './types';
+import { Recipe, TileConfig, TileTypeStr, ItemType } from './types';
 
 export const GRID_SIZE = 8;
 export const MAX_ENERGY = 20;
 export const MAX_HP = 20;
 export const MAX_TOOL_DURABILITY = 5;
-export const BASE_CAPACITY = 20;
+export const BASE_CAPACITY = 100;
 export const CARRIAGE_CAPACITY_BONUS = 10;
+export const INVENTORY_SIZE = 10;
+
+export const ITEM_CONFIG: Record<ItemType, { name: string; icon: any; maxStack: number; desc: string }> = {
+  wood: { name: 'Wood', icon: Trees, maxStack: 64, desc: 'Basic building material' },
+  stone: { name: 'Stone', icon: Gem, maxStack: 64, desc: 'Strong material' },
+  charcoal: { name: 'Charcoal', icon: Flame, maxStack: 64, desc: 'High energy fuel' },
+  axe: { name: 'Axe', icon: Axe, maxStack: 1, desc: 'For chopping trees' },
+  pickaxe: { name: 'Pickaxe', icon: Pickaxe, maxStack: 1, desc: 'For mining rocks' },
+  bow: { name: 'Bow', icon: Crosshair, maxStack: 1, desc: 'For hunting enemies' },
+};
 
 export const GAME_CONFIG = {
   AVATAR: {
@@ -82,10 +93,26 @@ export const GAME_CONFIG = {
 };
 
 export const RECIPES: Record<string, Recipe> = {
-  charcoal: { input: { wood: 3 }, output: { charcoal: 1 }, desc: "Convert wood to high-energy fuel" },
-  axe: { input: { wood: 1, stone: 1 }, output: { tool: 'axe' }, desc: "Logging (Durability 5)" },
-  pickaxe: { input: { wood: 5, stone: 1 }, output: { tool: 'pickaxe' }, desc: "Mining (Durability 5)" },
-  bow: { input: { wood: 10, stone: 5 }, output: { tool: 'bow' }, desc: "Weapon (Durability 5)" },
+  charcoal: {
+    input: [{ type: 'wood', count: 3 }],
+    output: { type: 'charcoal', count: 1 },
+    desc: "Convert wood to high-energy fuel"
+  },
+  axe: {
+    input: [{ type: 'wood', count: 1 }, { type: 'stone', count: 1 }],
+    output: { type: 'axe', count: 1, durability: MAX_TOOL_DURABILITY },
+    desc: "Logging (Durability 5)"
+  },
+  pickaxe: {
+    input: [{ type: 'wood', count: 5 }, { type: 'stone', count: 1 }],
+    output: { type: 'pickaxe', count: 1, durability: MAX_TOOL_DURABILITY },
+    desc: "Mining (Durability 5)"
+  },
+  bow: {
+    input: [{ type: 'wood', count: 10 }, { type: 'stone', count: 5 }],
+    output: { type: 'bow', count: 1, durability: MAX_TOOL_DURABILITY },
+    desc: "Weapon (Durability 5)"
+  },
 };
 
 export const TILE_TYPES: Record<string, TileConfig> = {

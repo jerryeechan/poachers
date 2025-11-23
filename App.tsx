@@ -3,11 +3,11 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   GRID_SIZE, MAX_ENERGY, MAX_HP, MAX_TOOL_DURABILITY,
   BASE_CAPACITY, CARRIAGE_CAPACITY_BONUS, RECIPES, TILE_TYPES,
-  GAME_CONFIG
+  GAME_CONFIG, ITEM_CONFIG, INVENTORY_SIZE
 } from './constants';
 
 import {
-  Resources, Tools, Tile as TileType, ViewState,
+  Inventory, Item, ItemType, Tile as TileType, ViewState,
   RestReport, WeatherType, LogEntry, GameStats
 } from './types';
 
@@ -18,6 +18,7 @@ import { GameOverModal } from './components/GameOverModal';
 import { Header } from './components/Header';
 import { StatusFooter } from './components/StatusFooter';
 import { WorkshopPanel } from './components/WorkshopPanel';
+import { InventoryBar } from './components/InventoryBar';
 
 // Utilities
 import { generateLevel, revealNeighbors } from './utils/map';
@@ -29,8 +30,10 @@ export default function App() {
   const [energy, setEnergy] = useState(MAX_ENERGY);
   const [hp, setHp] = useState(MAX_HP);
   const [gold, setGold] = useState(0);
-  const [resources, setResources] = useState<Resources>({ wood: 0, stone: 0, charcoal: 0 });
-  const [tools, setTools] = useState<Tools>({ axe: 0, pickaxe: 0, bow: 0 });
+
+  // Inventory State
+  const [inventory, setInventory] = useState<Inventory>(Array(INVENTORY_SIZE).fill(null));
+
   const [carriageLevel, setCarriageLevel] = useState(0);
 
   // Statistics for Score
@@ -54,13 +57,101 @@ export default function App() {
   const [restReport, setRestReport] = useState<RestReport | null>(null);
 
   // Computed Properties
-  const currentLoad = resources.wood + resources.stone + resources.charcoal;
+  const currentLoad = inventory.reduce((acc, item) => acc + (item ? item.count : 0), 0);
   const maxCapacity = BASE_CAPACITY + (carriageLevel * CARRIAGE_CAPACITY_BONUS);
 
   // --- Helpers ---
   const addLog = useCallback((text: string, type: LogEntry['type'] = 'neutral') => {
-    setLogs(prev => [{ id: Date.now() + Math.random(), text, type }, ...prev].slice(0, 15));
+    setLogs(prev => [{ id: Date.now() + Math.random(), text, type }, ...prev].slice(15));
   }, []);
+
+  // Inventory Helpers
+  const addToInventory = (type: ItemType, count: number, durability?: number): number => {
+    let remaining = count;
+    const newInv = [...inventory];
+    const maxStack = ITEM_CONFIG[type].maxStack;
+
+    // 1. Fill existing slots
+    for (let i = 0; i < newInv.length; i++) {
+      if (remaining <= 0) break;
+      const item = newInv[i];
+      if (item && item.type === type && item.count < maxStack) {
+        const space = maxStack - item.count;
+        const add = Math.min(remaining, space);
+        newInv[i] = { ...item, count: item.count + add };
+        remaining -= add;
+      }
+    }
+
+    // 2. Fill empty slots
+    for (let i = 0; i < newInv.length; i++) {
+      if (remaining <= 0) break;
+      if (newInv[i] === null) {
+        const add = Math.min(remaining, maxStack);
+        newInv[i] = {
+          id: Math.random().toString(36).substr(2, 9),
+          type,
+          count: add,
+          durability: durability,
+          maxDurability: durability ? MAX_TOOL_DURABILITY : undefined
+        };
+        remaining -= add;
+      }
+    }
+
+    setInventory(newInv);
+    return count - remaining; // Return amount actually added
+  };
+
+  const removeFromInventory = (type: ItemType, count: number): boolean => {
+    // Check if we have enough first
+    const total = inventory.reduce((acc, item) => (item?.type === type ? acc + item.count : acc), 0);
+    if (total < count) return false;
+
+    let remaining = count;
+    const newInv = [...inventory];
+
+    // Remove from last slots first (optional preference)
+    for (let i = newInv.length - 1; i >= 0; i--) {
+      if (remaining <= 0) break;
+      const item = newInv[i];
+      if (item && item.type === type) {
+        if (item.count > remaining) {
+          newInv[i] = { ...item, count: item.count - remaining };
+          remaining = 0;
+        } else {
+          remaining -= item.count;
+          newInv[i] = null;
+        }
+      }
+    }
+
+    setInventory(newInv);
+    return true;
+  };
+
+  const findTool = (type: ItemType) => {
+    return inventory.find(item => item?.type === type && (item.durability === undefined || item.durability > 0));
+  };
+
+  const decreaseToolDurability = (type: ItemType) => {
+    const newInv = [...inventory];
+    const index = newInv.findIndex(item => item?.type === type && (item.durability === undefined || item.durability > 0));
+
+    if (index !== -1) {
+      const item = newInv[index]!;
+      if (item.durability !== undefined) {
+        const newDurability = item.durability - 1;
+        if (newDurability <= 0) {
+          newInv[index] = null;
+          addLog(`Your ${type} broke!`, 'error');
+        } else {
+          newInv[index] = { ...item, durability: newDurability };
+        }
+        setInventory(newInv);
+      }
+    }
+  };
 
   // Check Game Over
   useEffect(() => {
@@ -102,9 +193,13 @@ export default function App() {
       return;
     }
 
-    if (config.tool && tools[config.tool as keyof Tools] <= 0) {
-      addLog(`Requires ${config.tool}!`, "error");
-      return;
+    // Check Tool
+    if (config.tool) {
+      const tool = findTool(config.tool as ItemType);
+      if (!tool) {
+        addLog(`Requires ${config.tool}!`, "error");
+        return;
+      }
     }
 
     const estimatedLoot = 1;
@@ -123,12 +218,7 @@ export default function App() {
 
     // Tool Durability
     if (config.tool) {
-      setTools(prev => {
-        const toolKey = config.tool as keyof Tools;
-        const newVal = prev[toolKey] - 1;
-        if (newVal === 0) addLog(`Your ${toolKey} broke!`, 'error');
-        return { ...prev, [toolKey]: newVal };
-      });
+      decreaseToolDurability(config.tool as ItemType);
     }
 
     const newGrid = [...grid];
@@ -136,11 +226,11 @@ export default function App() {
     if (!targetTile) return;
 
     let dropMsg = "";
-    let loot = { wood: 0, stone: 0 };
+    let loot: { type: ItemType, count: number }[] = [];
 
     if (tile.type === 'tree') {
       const amount = Math.floor(Math.random() * GAME_CONFIG.MAP.LOOT.TREE_VAR) + GAME_CONFIG.MAP.LOOT.TREE_MIN;
-      loot.wood = amount;
+      loot.push({ type: 'wood', count: amount });
       targetTile.scavengeLeft = (targetTile.scavengeLeft || 0) - 1;
       dropMsg = `Logging (+${amount} Wood)`;
       if (targetTile.scavengeLeft <= 0) {
@@ -149,21 +239,23 @@ export default function App() {
       }
     } else if (tile.type === 'rock') {
       const amount = Math.floor(Math.random() * GAME_CONFIG.MAP.LOOT.ROCK_VAR) + GAME_CONFIG.MAP.LOOT.ROCK_MIN;
-      loot.stone = amount;
+      loot.push({ type: 'stone', count: amount });
       dropMsg = `Mining (+${amount} Stone)`;
       targetTile.cleared = true;
       targetTile.type = 'search';
     } else if (tile.type === 'enemy') {
-      const hasBow = tools.bow > 0;
+      const hasBow = findTool('bow');
       const dmg = Math.max(1, targetTile.attack - (hasBow ? GAME_CONFIG.ACTIONS.BOW_BONUS_DMG : 0));
       setHp(prev => prev - dmg);
       if (hasBow) {
-        setTools(prev => ({ ...prev, bow: prev.bow - 1 }));
-        if (tools.bow - 1 === 0) addLog("Your bow broke!", 'error');
+        decreaseToolDurability('bow');
       }
 
-      loot.wood = Math.floor(Math.random() * GAME_CONFIG.MAP.ENEMIES.LOOT_WOOD_VAR) + GAME_CONFIG.MAP.ENEMIES.LOOT_WOOD_MIN;
-      loot.stone = Math.floor(Math.random() * GAME_CONFIG.MAP.ENEMIES.LOOT_STONE_VAR) + GAME_CONFIG.MAP.ENEMIES.LOOT_STONE_MIN;
+      const woodAmt = Math.floor(Math.random() * GAME_CONFIG.MAP.ENEMIES.LOOT_WOOD_VAR) + GAME_CONFIG.MAP.ENEMIES.LOOT_WOOD_MIN;
+      const stoneAmt = Math.floor(Math.random() * GAME_CONFIG.MAP.ENEMIES.LOOT_STONE_VAR) + GAME_CONFIG.MAP.ENEMIES.LOOT_STONE_MIN;
+      if (woodAmt > 0) loot.push({ type: 'wood', count: woodAmt });
+      if (stoneAmt > 0) loot.push({ type: 'stone', count: stoneAmt });
+
       dropMsg = `Enemy Defeated (HP -${dmg})`;
       targetTile.cleared = true;
       targetTile.type = 'search';
@@ -173,10 +265,10 @@ export default function App() {
       targetTile.searchCount = (targetTile.searchCount || 0) + 1;
       const roll = Math.random();
       if (roll < GAME_CONFIG.MAP.LOOT.EMPTY_CHANCE_WOOD) {
-        loot.wood = 1;
+        loot.push({ type: 'wood', count: 1 });
         dropMsg = "Found stray branch (+1 Wood)";
       } else if (roll < GAME_CONFIG.MAP.LOOT.EMPTY_CHANCE_STONE_THRESHOLD) {
-        loot.stone = 1;
+        loot.push({ type: 'stone', count: 1 });
         dropMsg = "Found loose rock (+1 Stone)";
       } else {
         dropMsg = "Nothing found...";
@@ -185,41 +277,22 @@ export default function App() {
     }
 
     // Add Resources with Capacity check
-    const actualLoad = resources.wood + resources.stone + resources.charcoal;
-    let addedWood = 0;
-    let addedStone = 0;
+    let totalAdded = 0;
+    loot.forEach(item => {
+      const added = addToInventory(item.type, item.count);
+      totalAdded += added;
+      if (added < item.count) {
+        addLog(`Inventory full! Discarded ${item.count - added} ${item.type}.`, "warning");
+      }
 
-    if (loot.wood > 0) {
-      const space = maxCapacity - actualLoad;
-      addedWood = Math.min(loot.wood, space);
-    }
-    if (loot.stone > 0) {
-      const space = maxCapacity - actualLoad - addedWood;
-      addedStone = Math.min(loot.stone, space);
-    }
-
-    if (addedWood < loot.wood || addedStone < loot.stone) {
-      addLog("Cargo full! Some resources discarded.", "warning");
-    }
-
-    setResources(prev => ({
-      ...prev,
-      wood: prev.wood + addedWood,
-      stone: prev.stone + addedStone
-    }));
-
-    // Update Stats
-    setGameStats(prev => ({
-      ...prev,
-      totalWood: prev.totalWood + addedWood,
-      totalStone: prev.totalStone + addedStone
-    }));
+      // Update Stats
+      if (item.type === 'wood') setGameStats(prev => ({ ...prev, totalWood: prev.totalWood + added }));
+      if (item.type === 'stone') setGameStats(prev => ({ ...prev, totalStone: prev.totalStone + added }));
+    });
 
     if (dropMsg) addLog(dropMsg, tile.type === 'enemy' ? 'warning' : 'success');
 
     // Reveal logic via Utility
-    // IMPORTANT: Only reveal neighbors if the current tile is now Walkable/Transparent (Search/Cleared)
-    // This prevents "X-Ray Vision" where hitting a tree reveals what's behind it before it's gone.
     let newlyRevealed: TileType[] = [];
     if (targetTile.cleared || targetTile.type === 'search') {
       newlyRevealed = revealNeighbors(targetTile.x, targetTile.y, newGrid);
@@ -269,53 +342,58 @@ export default function App() {
 
   const craftItem = (key: string) => {
     const recipe = RECIPES[key];
-    // Resource Check
-    const inputWood = recipe.input.wood || 0;
-    const inputStone = recipe.input.stone || 0;
 
-    if (resources.wood < inputWood || resources.stone < inputStone) {
+    // Check Resources
+    const canCraft = recipe.input.every(req => {
+      const count = inventory.reduce((acc, item) => (item?.type === req.type ? acc + item.count : acc), 0);
+      return count >= req.count;
+    });
+
+    if (!canCraft) {
       addLog("Insufficient resources", "error");
       return;
     }
 
-    // Capacity Check for Charcoal
-    if (recipe.output.charcoal) {
-      const inputWeight = inputWood + inputStone;
-      const outputWeight = recipe.output.charcoal;
-      if (currentLoad - inputWeight + outputWeight > maxCapacity) {
-        addLog("Cargo capacity insufficient!", "error");
-        return;
+    // Consume Resources
+    recipe.input.forEach(req => {
+      removeFromInventory(req.type, req.count);
+    });
+
+    // Add Output
+    const output = recipe.output;
+    // Check if we are repairing a tool (if it exists and has durability)
+    const existingToolIndex = inventory.findIndex(item => item?.type === output.type && item.maxDurability);
+
+    if (existingToolIndex !== -1 && output.durability) {
+      // Repair
+      const newInv = [...inventory];
+      newInv[existingToolIndex] = {
+        ...newInv[existingToolIndex]!,
+        durability: output.durability
+      };
+      setInventory(newInv);
+      addLog(`Repaired: ${key}`, "success");
+    } else {
+      // Craft new
+      const added = addToInventory(output.type, output.count, output.durability);
+      if (added < output.count) {
+        addLog("Inventory full! Item lost.", "error");
+      } else {
+        addLog(`Crafted: ${key}`, "success");
       }
     }
 
-    setResources(prev => ({
-      ...prev,
-      wood: prev.wood - inputWood,
-      stone: prev.stone - inputStone
-    }));
-
     setGameStats(prev => ({ ...prev, itemsCrafted: prev.itemsCrafted + 1 }));
-
-    if (recipe.output.tool) {
-      setTools(prev => ({ ...prev, [recipe.output.tool!]: MAX_TOOL_DURABILITY }));
-      addLog(`Crafted: ${key}`, "success");
-    } else if (recipe.output.charcoal) {
-      setResources(prev => ({ ...prev, charcoal: prev.charcoal + recipe.output.charcoal! }));
-      addLog("Refined Charcoal", "success");
-    }
   };
 
   const addFuel = (type: 'wood' | 'charcoal') => {
     if (pressure >= targetPressure) return;
 
-    if (type === 'wood') {
-      if (resources.wood < 1) { addLog("No Wood", "error"); return; }
-      setResources(prev => ({ ...prev, wood: prev.wood - 1 }));
-      setPressure(prev => Math.min(prev + GAME_CONFIG.TRAIN.FUEL_GAIN_WOOD, targetPressure));
+    if (removeFromInventory(type, 1)) {
+      const gain = type === 'wood' ? GAME_CONFIG.TRAIN.FUEL_GAIN_WOOD : GAME_CONFIG.TRAIN.FUEL_GAIN_CHARCOAL;
+      setPressure(prev => Math.min(prev + gain, targetPressure));
     } else {
-      if (resources.charcoal < 1) { addLog("No Charcoal", "error"); return; }
-      setResources(prev => ({ ...prev, charcoal: prev.charcoal - 1 }));
-      setPressure(prev => Math.min(prev + GAME_CONFIG.TRAIN.FUEL_GAIN_CHARCOAL, targetPressure));
+      addLog(`No ${type} available`, "error");
     }
   };
 
@@ -334,9 +412,8 @@ export default function App() {
   };
 
   // Shop Functions
-  const sellResource = (type: keyof Resources) => {
-    if (resources[type] > 0) {
-      setResources(prev => ({ ...prev, [type]: prev[type] - 1 }));
+  const sellResource = (type: ItemType) => {
+    if (removeFromInventory(type, 1)) {
       const price = type === 'charcoal' ? GAME_CONFIG.SHOP.SELL.CHARCOAL :
         type === 'wood' ? GAME_CONFIG.SHOP.SELL.WOOD :
           GAME_CONFIG.SHOP.SELL.STONE;
@@ -376,8 +453,7 @@ export default function App() {
     setEnergy(MAX_ENERGY);
     setHp(MAX_HP);
     setGold(0);
-    setResources({ wood: 0, stone: 0, charcoal: 0 });
-    setTools({ axe: 0, pickaxe: 0, bow: 0 });
+    setInventory(Array(INVENTORY_SIZE).fill(null));
     setCarriageLevel(0);
     setPressure(0);
     setGrid([]);
@@ -400,7 +476,7 @@ export default function App() {
         station={station}
         weather={weather}
         gold={gold}
-        resources={resources}
+        inventory={inventory}
         pressure={pressure}
         targetPressure={targetPressure}
         viewState={viewState}
@@ -415,7 +491,7 @@ export default function App() {
           <ShopOverlay
             station={station}
             gold={gold}
-            resources={resources}
+            inventory={inventory}
             carriageLevel={carriageLevel}
             onSell={sellResource}
             onBuyCarriage={buyCarriage}
@@ -441,13 +517,17 @@ export default function App() {
                 <Tile
                   key={tile.id}
                   tile={tile}
-                  tools={tools}
+                  inventory={inventory}
                   weather={weather}
                   energy={energy}
                   onTileClick={handleTileClick}
                 />
               ))}
             </div>
+          </div>
+
+          <div className="w-full max-w-2xl mx-auto mb-2">
+            <InventoryBar inventory={inventory} />
           </div>
 
           <StatusFooter
@@ -463,8 +543,7 @@ export default function App() {
         </section>
 
         <WorkshopPanel
-          resources={resources}
-          tools={tools}
+          inventory={inventory}
           logs={logs}
           onCraft={craftItem}
         />

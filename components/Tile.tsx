@@ -1,18 +1,18 @@
 
 import React from 'react';
 import { Axe, Pickaxe, Sword, Search } from 'lucide-react';
-import { Tile as TileInterface, Tools } from '../types';
+import { Tile as TileInterface, Inventory } from '../types';
 import { getTileConfig, GAME_CONFIG } from '../constants';
 
 interface TileProps {
   tile: TileInterface;
-  tools: Tools;
+  inventory: Inventory;
   weather: string;
   energy: number;
   onTileClick: (tile: TileInterface) => void;
 }
 
-export const Tile: React.FC<TileProps> = ({ tile, tools, weather, energy, onTileClick }) => {
+export const Tile: React.FC<TileProps> = ({ tile, inventory, weather, energy, onTileClick }) => {
   const config = getTileConfig(tile.type);
   const Icon = config.icon || Search;
 
@@ -29,6 +29,9 @@ export const Tile: React.FC<TileProps> = ({ tile, tools, weather, energy, onTile
   const isPeeked = !isRevealed && tile.peeked;
   const isHidden = !isRevealed && !isPeeked;
   const isVoid = tile.type === 'void';
+
+  // Helper to check tool
+  const hasTool = config.tool ? inventory.some(item => item?.type === config.tool && (item.durability === undefined || item.durability > 0)) : true;
 
   // Interactivity: Only allowed if FULLY REVEALED
   const isInteractable =
@@ -132,7 +135,7 @@ export const Tile: React.FC<TileProps> = ({ tile, tools, weather, energy, onTile
           {config.tool && !tile.cleared && (
             <div className={`
               absolute -top-2 -right-2 z-20 bg-stone-900 text-[10px] p-1 rounded-full border shadow-md
-              ${tools[config.tool] > 0 ? 'border-emerald-600 text-emerald-400' : 'border-red-900 text-red-500'}
+              ${hasTool ? 'border-emerald-600 text-emerald-400' : 'border-red-900 text-red-500'}
             `}>
               {config.tool === 'axe' ? <Axe size={10} /> : config.tool === 'pickaxe' ? <Pickaxe size={10} /> : <Sword size={10} />}
             </div>

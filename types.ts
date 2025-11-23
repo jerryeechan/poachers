@@ -6,6 +6,20 @@ export type TileTypeStr = 'void' | 'track' | 'search' | 'train' | 'tree' | 'rock
 export type WeatherType = 'sunny' | 'rain' | 'windy';
 export type ViewState = 'map' | 'shop' | 'gameover';
 
+export interface Item {
+  id: string; // Unique ID for the item instance (optional, but good for React keys)
+  type: ItemType;
+  count: number;
+  durability?: number;
+  maxDurability?: number;
+}
+
+export type ItemType = 'wood' | 'stone' | 'charcoal' | 'axe' | 'pickaxe' | 'bow';
+
+export type Inventory = (Item | null)[];
+
+// Deprecated but keeping for now to avoid breaking everything immediately, 
+// though we will remove usage in App.tsx
 export interface Resources {
   wood: number;
   stone: number;
@@ -40,11 +54,8 @@ export interface Tile {
 }
 
 export interface Recipe {
-  input: Partial<Resources>;
-  output: {
-    charcoal?: number;
-    tool?: ToolType;
-  };
+  input: { type: ItemType; count: number }[];
+  output: { type: ItemType; count: number; durability?: number };
   desc: string;
 }
 
