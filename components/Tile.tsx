@@ -28,6 +28,21 @@ const EnemyOverlay: React.FC<{ tile: TileInterface }> = ({ tile }) => (
   </>
 );
 
+const AttackProgressOverlay: React.FC<{ tile: TileInterface }> = ({ tile }) => {
+  const progress = tile.attackProgress || 0;
+  const max = tile.maxAttackProgress || 1;
+  const pct = (progress / max) * 100;
+
+  return (
+    <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[90%] h-1.5 bg-stone-900 rounded-full overflow-hidden z-20 border border-red-900/50">
+      <div
+        className="h-full bg-red-600 transition-all duration-300"
+        style={{ width: `${pct}%` }}
+      />
+    </div>
+  );
+};
+
 const NPCOverlay: React.FC<{ tile: TileInterface }> = ({ tile }) => {
   const progress = (tile.rescueProgress || 0);
   const maxProgress = (tile.maxRescueProgress || 1);
@@ -185,6 +200,7 @@ export const Tile: React.FC<TileProps> = ({ tile, inventory, weather, energy, re
         tile.type === 'locomotive' ||
         tile.type === 'workshop_carriage' ||
         tile.type === 'cargo_carriage' ||
+        tile.type === 'passenger_carriage' ||
         ((tile.type === 'tree') && tile.scavengeLeft > 0) ||
         (tile.type === 'npc' && !tile.cleared)
       ))
@@ -196,7 +212,7 @@ export const Tile: React.FC<TileProps> = ({ tile, inventory, weather, energy, re
   // 3. Determine Styles
   let containerClass = `
     relative group flex items-center justify-center
-    w-8 h-8 sm:w-10 sm:h-10 lg:w-14 lg:h-14 
+    w-10 h-10 sm:w-12 sm:h-12 lg:w-14 lg:h-14 
     rounded-xl transition-all duration-200
     focus:outline-none
   `;
@@ -254,7 +270,12 @@ export const Tile: React.FC<TileProps> = ({ tile, inventory, weather, energy, re
           <Icon size={20} className={`relative z-10 drop-shadow-md ${tile.type === 'enemy' ? 'animate-pulse' : ''} ${tile.isBroken ? 'text-red-500 opacity-50' : ''}`} />
 
           {/* Overlays based on Type */}
-          {tile.type === 'enemy' && !tile.cleared && <EnemyOverlay tile={tile} />}
+          {tile.type === 'enemy' && !tile.cleared && (
+            <>
+              <EnemyOverlay tile={tile} />
+              <AttackProgressOverlay tile={tile} />
+            </>
+          )}
 
           {tile.type === 'npc' && !tile.cleared && <NPCOverlay tile={tile} />}
 
@@ -272,7 +293,7 @@ export const Tile: React.FC<TileProps> = ({ tile, inventory, weather, energy, re
           })()}
 
           {/* Train NPC Count Badge */}
-          {tile.type === 'locomotive' && rescuedNPCs > 0 && (
+          {tile.type === 'passenger_carriage' && rescuedNPCs > 0 && (
             <div className="absolute -bottom-2 -right-2 bg-blue-950 text-blue-300 text-[10px] px-1.5 py-0.5 rounded-full font-bold border border-blue-700 z-20 shadow-sm font-mono">
               {rescuedNPCs}
             </div>

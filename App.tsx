@@ -8,7 +8,7 @@ import {
 
 import {
   Inventory, Item, ItemType, Tile as TileType, ViewState,
-  RestReport, WeatherType, LogEntry, GameStats
+  RestReport, WeatherType, LogEntry, GameStats, NPCData
 } from './types';
 
 import { Tile } from './components/Tile';
@@ -24,6 +24,8 @@ import { LogModal } from './components/LogModal';
 import { CargoModal } from './components/CargoModal';
 import { LocomotiveModal } from './components/LocomotiveModal';
 import { InventoryBar } from './components/InventoryBar';
+import { PassengerCarriageModal } from './components/PassengerCarriageModal';
+import { DebugPanel } from './components/DebugPanel';
 
 // Utilities
 import { generateLevel, revealNeighbors, updatePeekStatus } from './utils/map';
@@ -31,6 +33,7 @@ import { getAvatarFace, calculateRestOutcome, calculateEnemyLevel } from './util
 import { canClickTile, validateAndCalculateCost, findToolIndex, calculateTileCost, TileActionContext } from './utils/tileActions';
 import { processExplorationReveal, processCombat, processInteraction, processItemConsumption } from './utils/interactionLogic';
 import { addToInventory, removeFromInventory, consumeResources, decreaseToolDurability, consumeFromCombinedInventory } from './utils/inventory';
+import { updateEnemyAttackProgress } from './utils/enemyLogic';
 
 export default function App() {
   // --- Global State ---
@@ -48,7 +51,7 @@ export default function App() {
   const [carriageLevel, setCarriageLevel] = useState(0);
 
   // Train Capacity & Rescued NPCs
-  const [rescuedNPCs, setRescuedNPCs] = useState<{ buff: 'stamina' | 'health' | 'attack' }[]>([]);
+  const [rescuedNPCs, setRescuedNPCs] = useState<NPCData[]>([]);
   const maxTrainCapacity = GAME_CONFIG.MAP.NPC.TRAIN_CAPACITY_BASE;
 
   // Statistics for Score
@@ -78,6 +81,9 @@ export default function App() {
   const [showLogModal, setShowLogModal] = useState(false);
   const [showCargoModal, setShowCargoModal] = useState(false);
   const [showLocomotiveModal, setShowLocomotiveModal] = useState(false);
+  const [showDebugPanel, setShowDebugPanel] = useState(false);
+  const [lastClickedTile, setLastClickedTile] = useState<TileType | null>(null);
+  const [showPassengerModal, setShowPassengerModal] = useState(false);
 
   // Computed Properties
   const currentLoad = inventory.reduce((acc, item) => acc + (item ? item.count : 0), 0);
@@ -100,7 +106,7 @@ export default function App() {
   const [selectedSlot, setSelectedSlot] = useState<number | undefined>(undefined);
 
   // Time Management
-  const advanceTime = useCallback((minutes: number) => {
+  const advanceTime = useCallback((minutes: number, triggerPassiveEvents: boolean = true) => {
     setTime(prevTime => {
       const newTime = prevTime + minutes;
 
@@ -117,6 +123,28 @@ export default function App() {
 
       return newTime;
     });
+
+    // Passive Enemy Attacks (Progress Bar Update)
+    // This runs AFTER setTime, using the current grid from closure
+    if (triggerPassiveEvents) {
+      setGrid(prevGrid => {
+        const { updatedGrid, damage, logs: attackLogs } = updateEnemyAttackProgress(
+          prevGrid,  // Use the latest grid from state
+          minutes
+        );
+
+        // Only update grid if there are changes
+        if (damage > 0 || prevGrid.some(t => t.type === 'enemy' && t.revealed && !t.cleared)) {
+          if (damage > 0) {
+            setHp(prev => prev - damage);
+            attackLogs.forEach(log => addLog(log.text, log.type));
+          }
+          return updatedGrid;
+        }
+
+        return prevGrid; // No changes, return same reference
+      });
+    }
   }, [addLog]);
 
   // Inventory Helpers (Refactored to be pure-ish)
@@ -151,8 +179,23 @@ export default function App() {
     }
   };
 
+  // Debug Panel Keyboard Shortcut
+  useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      if (e.key === '`') {
+        setShowDebugPanel(prev => !prev);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, []);
+
   // --- Actions ---
   const handleTileClick = (tile: TileType) => {
+    // Track last clicked tile for debugging
+    setLastClickedTile(tile);
+
     // Check if tile can be clicked
     console.log("Tile clicked" + tile.type);
     if (!canClickTile(tile, viewState)) {
@@ -183,49 +226,40 @@ export default function App() {
     // Exploration Logic
     if (!tile.revealed && tile.peeked) {
       setEnergy(prev => prev - cost);
-      advanceTime(10);
+      advanceTime(10); // This may update grid with enemy attacks
 
-      const newGrid = [...grid];
-      const targetTileIndex = newGrid.findIndex(t => t.id === tile.id);
-      if (targetTileIndex === -1) return;
+      console.log("Explore " + tile.type);
 
-      const targetTile = { ...newGrid[targetTileIndex] };
-      targetTile.explorationProgress = (targetTile.explorationProgress || 0) + 1;
+      // Use functional update to ensure we work with the latest grid
+      setGrid(prevGrid => {
+        const newGrid = [...prevGrid];
+        const targetTileIndex = newGrid.findIndex(t => t.id === tile.id);
+        if (targetTileIndex === -1) return prevGrid;
 
-      if (targetTile.explorationProgress >= (targetTile.maxExploration || 1)) {
-        // Reveal!
-        const { updatedTile, loot, logs: newLogs } = processExplorationReveal(targetTile, newGrid);
-        newGrid[targetTileIndex] = updatedTile;
+        const targetTile = { ...newGrid[targetTileIndex] };
+        targetTile.explorationProgress = (targetTile.explorationProgress || 0) + 1;
 
-        newLogs.forEach(log => addLog(log.text, log.type));
-
-        loot.forEach(item => {
-          const res = addToInventory(inventory, item.type, item.count);
-          setInventory(res.newInv);
-          if (item.type === 'wood') setGameStats(prev => ({ ...prev, totalWood: prev.totalWood + item.count }));
-          if (item.type === 'stone') setGameStats(prev => ({ ...prev, totalStone: prev.totalStone + item.count }));
-        });
-
-        // If the revealed tile is transparent (like Search/Empty), it might reveal neighbors
-        if (updatedTile.type === 'search') {
-          const newlyRevealed = revealNeighbors(updatedTile.x, updatedTile.y, newGrid);
-          // Handle ambush for newly revealed enemies from this chain reaction
-          let ambushDmg = 0;
-          newlyRevealed.forEach(t => {
-            if (t.type === 'enemy') {
-              ambushDmg += t.attack;
-              addLog(`Ambush! Nearby enemy spotted! (HP -${t.attack})`, 'error');
-              t.effect = 'flash';
-            }
+        if (targetTile.explorationProgress >= (targetTile.maxExploration || 1)) {
+          // Reveal!
+          const { updatedTile, loot, logs: newLogs } = processExplorationReveal(targetTile, newGrid);
+          console.log("Reveal!" + updatedTile.type + " " + updatedTile.revealed);
+          newGrid[targetTileIndex] = updatedTile;
+          newLogs.forEach(log => addLog(log.text, log.type));
+          loot.forEach(item => {
+            const res = addToInventory(inventory, item.type, item.count);
+            setInventory(res.newInv);
+            if (item.type === 'wood') setGameStats(prev => ({ ...prev, totalWood: prev.totalWood + item.count }));
+            if (item.type === 'stone') setGameStats(prev => ({ ...prev, totalStone: prev.totalStone + item.count }));
           });
-          if (ambushDmg > 0) setHp(prev => prev - ambushDmg);
+        } else {
+          newGrid[targetTileIndex] = targetTile;
+          addLog("Exploring...", 'neutral');
         }
-      } else {
-        newGrid[targetTileIndex] = targetTile;
-        addLog("Exploring...", 'neutral');
-      }
-      updatePeekStatus(newGrid);
-      setGrid(newGrid);
+
+        updatePeekStatus(newGrid);
+        return newGrid;
+      });
+
       return;
     }
 
@@ -270,6 +304,11 @@ export default function App() {
       } else {
         setShowCargoModal(true);
       }
+      return;
+    }
+
+    if (tile.type === 'passenger_carriage') {
+      setShowPassengerModal(true);
       return;
     }
 
@@ -326,114 +365,116 @@ export default function App() {
     }
 
     const estimatedLoot = 1;
-    if (currentLoad + estimatedLoot > maxCapacity && tile.type !== 'search' && tile.type !== 'enemy') {
+    if (currentLoad + estimatedLoot > maxCapacity && tile.type !== 'npc' && tile.type !== 'search' && tile.type !== 'enemy') {
       addLog("Cargo full! Cannot carry more.", "error");
       return;
     }
 
     setEnergy(prev => prev - cost);
-    advanceTime(10);
+    advanceTime(10); // Enable passive events - will update grid with enemy attacks
 
-    let tempInv = [...inventory];
-    const newGrid = [...grid];
-    const targetTileIndex = newGrid.findIndex(t => t.id === tile.id);
-    if (targetTileIndex === -1) return;
-    const targetTile = { ...newGrid[targetTileIndex] };
+    // Use functional update to work with the latest grid (after enemy attacks)
+    setGrid(prevGrid => {
+      let tempInv = [...inventory];
+      const newGrid = [...prevGrid];
+      const targetTileIndex = newGrid.findIndex(t => t.id === tile.id);
+      if (targetTileIndex === -1) return prevGrid;
+      const targetTile = { ...newGrid[targetTileIndex] };
 
-    let loot: { type: ItemType, count: number }[] = [];
-    let dropMsg = "";
+      let loot: { type: ItemType, count: number }[] = [];
 
-    if (tile.type === 'enemy') {
-      const { updatedTile, hpChange, goldChange, loot: combatLoot, logs: combatLogs, statsUpdate, toolDurabilityIndex } = processCombat(
-        targetTile,
-        tempInv,
-        selectedSlot,
-        selectedSlot !== undefined && tempInv[selectedSlot]?.type === 'bow' ? GAME_CONFIG.ACTIONS.BOW_DMG : buffedAttack,
-        station,
-        gameStats.san
-      );
+      if (tile.type === 'enemy') {
+        const { updatedTile, hpChange, goldChange, loot: combatLoot, logs: combatLogs, statsUpdate, toolDurabilityIndex } = processCombat(
+          targetTile,
+          tempInv,
+          selectedSlot,
+          selectedSlot !== undefined && tempInv[selectedSlot]?.type === 'bow' ? GAME_CONFIG.ACTIONS.BOW_DMG : buffedAttack,
+          station,
+          gameStats.san
+        );
 
-      newGrid[targetTileIndex] = updatedTile;
-      if (hpChange !== 0) setHp(prev => prev + hpChange);
-      if (goldChange !== 0) setGold(prev => prev + goldChange);
-      if (statsUpdate.enemiesDefeated) setGameStats(prev => ({ ...prev, enemiesDefeated: prev.enemiesDefeated + statsUpdate.enemiesDefeated! }));
+        newGrid[targetTileIndex] = updatedTile;
+        if (hpChange !== 0) setHp(prev => prev + hpChange);
+        if (goldChange !== 0) setGold(prev => prev + goldChange);
+        if (statsUpdate.enemiesDefeated) setGameStats(prev => ({ ...prev, enemiesDefeated: prev.enemiesDefeated + statsUpdate.enemiesDefeated! }));
 
-      combatLogs.forEach(log => addLog(log.text, log.type));
-      loot = combatLoot;
+        combatLogs.forEach(log => addLog(log.text, log.type));
+        loot = combatLoot;
 
-      if (toolDurabilityIndex !== undefined) {
-        const res = decreaseToolDurability(tempInv, toolDurabilityIndex);
-        tempInv = res.newInv;
-        if (res.broken) {
-          addLog(`Your ${res.itemType} broke!`, 'error');
-          setSelectedSlot(undefined);
-        }
-      }
-
-    } else {
-      // Non-Combat Logic
-      if (config.tool) {
-        const toolIndex = findToolIndex(tempInv, config.tool, selectedSlot);
-        if (toolIndex !== -1) {
-          const res = decreaseToolDurability(tempInv, toolIndex);
+        if (toolDurabilityIndex !== undefined) {
+          const res = decreaseToolDurability(tempInv, toolDurabilityIndex);
           tempInv = res.newInv;
           if (res.broken) {
             addLog(`Your ${res.itemType} broke!`, 'error');
-            if (selectedSlot === toolIndex) setSelectedSlot(undefined);
+            setSelectedSlot(undefined);
           }
+        }
+
+      } else {
+        // Non-Combat Logic
+        if (config.tool) {
+          const toolIndex = findToolIndex(tempInv, config.tool, selectedSlot);
+          if (toolIndex !== -1) {
+            const res = decreaseToolDurability(tempInv, toolIndex);
+            tempInv = res.newInv;
+            if (res.broken) {
+              addLog(`Your ${res.itemType} broke!`, 'error');
+              if (selectedSlot === toolIndex) setSelectedSlot(undefined);
+            }
+          }
+        }
+
+        const { updatedTile, loot: interactLoot, logs: interactLogs, rescuedNPC } = processInteraction(targetTile, tempInv, selectedSlot);
+
+        newGrid[targetTileIndex] = updatedTile;
+        interactLogs.forEach(log => addLog(log.text, log.type));
+        loot = interactLoot;
+
+        if (rescuedNPC) {
+          setRescuedNPCs(prev => [...prev, rescuedNPC!]);
         }
       }
 
-      const { updatedTile, loot: interactLoot, logs: interactLogs, rescuedNPC } = processInteraction(targetTile, tempInv, selectedSlot);
+      // Add Resources with Capacity check
+      let totalAdded = 0;
+      loot.forEach(item => {
+        const res = addToInventory(tempInv, item.type, item.count);
+        tempInv = res.newInv;
+        const added = res.added;
+        totalAdded += added;
+        if (added < item.count) {
+          addLog(`Inventory full! Discarded ${item.count - added} ${item.type}.`, "warning");
+        }
 
-      newGrid[targetTileIndex] = updatedTile;
-      interactLogs.forEach(log => addLog(log.text, log.type));
-      loot = interactLoot;
+        // Update Stats
+        if (item.type === 'wood') setGameStats(prev => ({ ...prev, totalWood: prev.totalWood + added }));
+        if (item.type === 'stone') setGameStats(prev => ({ ...prev, totalStone: prev.totalStone + added }));
+      });
 
-      if (rescuedNPC) {
-        setRescuedNPCs(prev => [...prev, rescuedNPC!]);
+      setInventory(tempInv);
+
+      // Reveal logic via Utility
+      const updatedTarget = newGrid[targetTileIndex];
+      let newlyRevealed: TileType[] = [];
+      if (updatedTarget.cleared || updatedTarget.type === 'search' || tile.type === 'tree' || tile.type === 'rock') {
+        newlyRevealed = revealNeighbors(updatedTarget.x, updatedTarget.y, newGrid);
       }
-    }
 
-    // Add Resources with Capacity check
-    let totalAdded = 0;
-    loot.forEach(item => {
-      const res = addToInventory(tempInv, item.type, item.count);
-      tempInv = res.newInv;
-      const added = res.added;
-      totalAdded += added;
-      if (added < item.count) {
-        addLog(`Inventory full! Discarded ${item.count - added} ${item.type}.`, "warning");
+      let ambushDmg = 0;
+      newlyRevealed.forEach(t => {
+        if (t.type === 'enemy') {
+          ambushDmg += t.attack;
+          addLog(`Ambush! Nearby enemy spotted! (HP -${t.attack})`, 'error');
+          t.effect = 'flash';
+        }
+      });
+
+      if (ambushDmg > 0) {
+        setHp(prev => prev - ambushDmg);
       }
 
-      // Update Stats
-      if (item.type === 'wood') setGameStats(prev => ({ ...prev, totalWood: prev.totalWood + added }));
-      if (item.type === 'stone') setGameStats(prev => ({ ...prev, totalStone: prev.totalStone + added }));
+      return newGrid;
     });
-
-    setInventory(tempInv);
-
-    // Reveal logic via Utility
-    const updatedTarget = newGrid[targetTileIndex];
-    let newlyRevealed: TileType[] = [];
-    if (updatedTarget.cleared || updatedTarget.type === 'search' || tile.type === 'tree' || tile.type === 'rock') {
-      newlyRevealed = revealNeighbors(updatedTarget.x, updatedTarget.y, newGrid);
-    }
-
-    let ambushDmg = 0;
-    newlyRevealed.forEach(t => {
-      if (t.type === 'enemy') {
-        ambushDmg += t.attack;
-        addLog(`Ambush! Nearby enemy spotted! (HP -${t.attack})`, 'error');
-        t.effect = 'flash';
-      }
-    });
-
-    if (ambushDmg > 0) {
-      setHp(prev => prev - ambushDmg);
-    }
-
-    setGrid(newGrid);
   };
 
   const handleAvatarClick = () => {
@@ -452,7 +493,7 @@ export default function App() {
         setInventory(res.newInv);
         setHp(prev => Math.min(prev + (GAME_CONFIG.ITEMS.BERRY.HEAL), buffedMaxHp));
         setEnergy(prev => Math.min(prev + energyChange, buffedMaxEnergy));
-        advanceTime(10);
+        advanceTime(10); // Eating takes time, allow passive attacks
 
         // If run out, deselect
         if (item.count <= 1) {
@@ -505,11 +546,14 @@ export default function App() {
           return {
             ...t,
             type: 'enemy',
+            revealed: true, // Ensure spawned enemy is visible
             cleared: false,
             scavengeLeft: 0,
             attack: spawnedEnemy.attack,
             hp: spawnedEnemy.hp,
-            maxHp: spawnedEnemy.hp
+            maxHp: spawnedEnemy.hp,
+            attackProgress: 0,
+            maxAttackProgress: GAME_CONFIG.MAP.ENEMIES.PASSIVE_ATTACK_INTERVAL
           };
         }
         return t;
@@ -520,7 +564,16 @@ export default function App() {
     if (restReport.ambush) {
       setGrid(prev => prev.map(t => {
         if (t.id === restReport.ambush!.id) {
-          return { ...t, type: 'enemy', cleared: false, scavengeLeft: 0, attack: restReport.ambush!.attack };
+          return {
+            ...t,
+            type: 'enemy',
+            revealed: true, // Ensure ambush enemy is visible
+            cleared: false,
+            scavengeLeft: 0,
+            attack: restReport.ambush!.attack,
+            attackProgress: 0,
+            maxAttackProgress: GAME_CONFIG.MAP.ENEMIES.PASSIVE_ATTACK_INTERVAL
+          };
         }
         return t;
       }));
@@ -743,7 +796,7 @@ export default function App() {
   }, [energy, grid, inventory, weather]);
 
   return (
-    <div className="h-screen bg-stone-950 text-stone-200 font-sans select-none overflow-hidden flex flex-col">
+    <div className="h-screen w-screen bg-stone-950 text-stone-200 font-sans select-none overflow-hidden flex flex-col">
 
       <Header
         station={station}
@@ -762,7 +815,7 @@ export default function App() {
         time={time}
       />
 
-      <main className="flex-1 overflow-hidden flex flex-col lg:flex-row relative">
+      <main className="flex-1 overflow-hidden flex flex-col relative">
 
         {/* View Overlays */}
         {viewState === 'shop' && (
@@ -778,6 +831,13 @@ export default function App() {
           />
         )}
 
+        {showPassengerModal && (
+          <PassengerCarriageModal
+            rescuedNPCs={rescuedNPCs}
+            onClose={() => setShowPassengerModal(false)}
+          />
+        )}
+
         {viewState === 'gameover' && (
           <GameOverModal
             stats={gameStats}
@@ -789,8 +849,8 @@ export default function App() {
         {/* Map Section */}
         <section className="flex-1 bg-[#0c0a09] relative overflow-hidden flex flex-col">
           {/* Grid Container */}
-          <div className="flex-1 overflow-auto p-4 flex items-center justify-center custom-scrollbar">
-            <div className="grid grid-cols-8 gap-2 sm:gap-3 p-4 bg-stone-900 rounded-2xl shadow-2xl border border-stone-800">
+          <div className="flex-1 overflow-auto flex items-center justify-center custom-scrollbar p-0.5 sm:p-4">
+            <div className="grid grid-cols-8 gap-1 sm:gap-2 md:gap-3 p-1 sm:p-3 md:p-4 bg-stone-900 rounded-lg sm:rounded-2xl shadow-2xl border border-stone-800">
               {grid.map((tile) => {
                 // Check for adjacent enemies or broken bridges
                 let isBlocked = false;
@@ -842,11 +902,12 @@ export default function App() {
                     isBlocked={isBlocked}
                   />
                 );
-              })}
+              })
+              }
             </div>
           </div>
 
-          <div className="w-full max-w-2xl mx-auto mb-2">
+          <div className="w-full max-w-4xl mx-auto px-1 sm:px-4 mb-0.5 sm:mb-2">
             <InventoryBar
               inventory={inventory}
               selectedSlot={selectedSlot}
@@ -953,6 +1014,14 @@ export default function App() {
             }
           }}
           onClose={() => setShowCargoModal(false)}
+        />
+      )}
+
+      {/* Debug Panel */}
+      {showDebugPanel && (
+        <DebugPanel
+          tile={lastClickedTile}
+          onClose={() => setShowDebugPanel(false)}
         />
       )}
 

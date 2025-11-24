@@ -1,4 +1,4 @@
-import { Tile as TileType, Inventory, ItemType, LogEntry, GameStats } from '../types';
+import { Tile as TileType, Inventory, ItemType, LogEntry, GameStats, NPCData } from '../types';
 import { GAME_CONFIG, ITEM_CONFIG } from '../constants';
 import { calculateEnemyLevel } from './gameplay';
 
@@ -9,7 +9,7 @@ export interface InteractionResult {
     goldChange: number;
     statsUpdate: Partial<GameStats>;
     logs: { text: string; type: LogEntry['type'] }[];
-    rescuedNPC?: { buff: 'stamina' | 'health' | 'attack' };
+    rescuedNPC?: NPCData;
     toolDurabilityIndex?: number;
 }
 
@@ -49,6 +49,7 @@ export const processExplorationReveal = (
         logs.push({ text: "Area explored.", type: 'neutral' });
     }
 
+    console.log("processExplorationReveal", updatedTile.type);
     return { updatedTile, loot, logs };
 };
 
@@ -90,6 +91,7 @@ export const processCombat = (
         // Enemy Defeated
         updatedTile.cleared = true;
         updatedTile.type = 'search';
+        updatedTile.revealed = true;
         updatedTile.effect = 'pop';
 
         let dropMsg = `Enemy Defeated!`;
@@ -119,16 +121,16 @@ export const processCombat = (
         logs.push({ text: dropMsg, type: 'success' });
 
         if (isUsingBow) {
-            logs.push({ text: "Sniper Shot! Took no damage.", type: 'success' });
+            logs.push({ text: "Sniper Shot! no damage taken", type: 'success' });
             toolDurabilityIndex = selectedSlot;
         } else {
-            hpChange = -enemyDmg;
+            hpChange = -enemyDmg; // Removed immediate counter-attack
             logs.push({ text: `Took ${enemyDmg} damage!`, type: 'warning' });
         }
     } else {
         // Enemy Survived
-        hpChange = -enemyDmg;
-        logs.push({ text: `Hit enemy for ${playerDmg}. Took ${enemyDmg} damage!`, type: 'warning' });
+        hpChange = -enemyDmg; // Removed immediate counter-attack
+        logs.push({ text: `Hit enemy for ${playerDmg}.`, type: 'warning' });
         if (isUsingBow) {
             toolDurabilityIndex = selectedSlot;
         }
@@ -148,12 +150,12 @@ export const processInteraction = (
     updatedTile: TileType;
     loot: { type: ItemType; count: number }[];
     logs: { text: string; type: LogEntry['type'] }[];
-    rescuedNPC?: { buff: 'stamina' | 'health' | 'attack' };
+    rescuedNPC?: NPCData;
 } => {
     const updatedTile = { ...tile };
     const loot: { type: ItemType; count: number }[] = [];
     const logs: { text: string; type: LogEntry['type'] }[] = [];
-    let rescuedNPC: { buff: 'stamina' | 'health' | 'attack' } | undefined;
+    let rescuedNPC: NPCData | undefined;
 
     if (tile.type === 'tree') {
         const amount = Math.floor(Math.random() * GAME_CONFIG.MAP.LOOT.TREE_VAR) + GAME_CONFIG.MAP.LOOT.TREE_MIN;
@@ -183,14 +185,27 @@ export const processInteraction = (
             updatedTile.type = 'search';
 
             const buff = updatedTile.npcBuff || 'stamina';
-            rescuedNPC = { buff };
+
+            const NPC_NAMES = [
+                "Aria", "Bram", "Cael", "Dora", "Elian", "Fae", "Grom", "Hana", "Ivor", "Juno",
+                "Kael", "Lira", "Milo", "Nia", "Orin", "Pia", "Quin", "Rian", "Sola", "Tor",
+                "Una", "Vane", "Wren", "Xal", "Yara", "Zane"
+            ];
+            const name = NPC_NAMES[Math.floor(Math.random() * NPC_NAMES.length)];
+
+            rescuedNPC = {
+                id: Date.now().toString(),
+                name,
+                status: 'healthy',
+                buff
+            };
 
             const buffNames = {
                 'stamina': 'Max Stamina',
                 'health': 'Max HP',
                 'attack': 'Attack Power'
             };
-            logs.push({ text: `NPC Rescued! Gained ${buffNames[buff]} buff!`, type: 'success' });
+            logs.push({ text: `NPC Rescued! ${name} joined the crew (${buffNames[buff]})`, type: 'success' });
         } else {
             logs.push({ text: `Rescuing... ${updatedTile.rescueProgress} turns left`, type: 'neutral' });
         }

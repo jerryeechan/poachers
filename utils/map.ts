@@ -12,7 +12,7 @@ const isLightSource = (tile: TileType | undefined): boolean => {
   // if (!tile || !tile.revealed) return false;
   // Void, Track, Train are always transparent. 
   // Other types are only transparent if cleared (which usually converts them to 'empty', but checking cleared is safer)
-  return tile.type === 'train' || tile.type === 'locomotive' || tile.type === 'workshop_carriage' || tile.type === 'cargo_carriage' || tile.cleared || tile.revealed;
+  return tile.type === 'train' || tile.type === 'locomotive' || tile.type === 'workshop_carriage' || tile.type === 'cargo_carriage' || tile.type === 'passenger_carriage' || tile.cleared || tile.revealed;
   // return tile.type === 'void' || tile.type === 'train' || tile.type === 'search' || tile.cleared;
   // return tile.type === 'void' || tile.type === 'track' || tile.type === 'train' || tile.type === 'search' || tile.cleared;
 };
@@ -92,6 +92,10 @@ export const generateLevel = (station: number, san: number = 0): TileType[] => {
           type = 'cargo_carriage';
           revealed = true;
           cleared = true;
+        } else if (x === centerX - 2) {
+          type = 'passenger_carriage';
+          revealed = true;
+          cleared = true;
         } else {
           type = 'track';
           revealed = false;
@@ -131,6 +135,7 @@ export const generateLevel = (station: number, san: number = 0): TileType[] => {
     t.type !== 'locomotive' &&
     t.type !== 'workshop_carriage' &&
     t.type !== 'cargo_carriage' &&
+    t.type !== 'passenger_carriage' &&
     t.type !== 'track' &&
     t.type !== 'void'
   );
@@ -239,6 +244,8 @@ export const generateLevel = (station: number, san: number = 0): TileType[] => {
         (level * 2);
       tile.hp = hp;
       tile.maxHp = hp;
+      tile.attackProgress = 0;
+      tile.maxAttackProgress = GAME_CONFIG.MAP.ENEMIES.PASSIVE_ATTACK_INTERVAL;
     } else if (type === 'search') {
       tile.scavengeLeft = Math.floor(Math.random() * GAME_CONFIG.MAP.LOOT.SCAVENGE_VAR) + GAME_CONFIG.MAP.LOOT.SCAVENGE_MIN;
     }
@@ -262,19 +269,28 @@ export const generateLevel = (station: number, san: number = 0): TileType[] => {
   }
 
   // 10. Broken Bridge (Exactly 1)
-  // We convert one of the broken tracks into a broken bridge if possible, or just a random track if no broken tracks (though there should be)
-  // Actually, let's just pick a random track (broken or not) and make it a bridge.
-  // But the user said "generate 1 broken bridge".
-  // Let's ensure at least one track is a bridge.
-  if (trackTiles.length > 0) {
-    // Pick a random track to be a bridge
-    const bridgeIndex = Math.floor(Math.random() * trackTiles.length);
-    const bridgeTile = trackTiles[bridgeIndex];
+  // Select a tile that is NOT on the center row (track)
+  const offTrackTiles = newGrid.filter(t => t.y !== centerY);
+
+  if (offTrackTiles.length > 0) {
+    const bridgeIndex = Math.floor(Math.random() * offTrackTiles.length);
+    const bridgeTile = offTrackTiles[bridgeIndex];
+
+    // If we are overwriting an enemy/resource, that's fine, it becomes a hazard
     bridgeTile.type = 'bridge';
     bridgeTile.isBroken = true;
+    bridgeTile.cleared = false; // Ensure it's not cleared
+    bridgeTile.revealed = false; // Reset revealed if it was (though off-track shouldn't be revealed initially usually)
 
-    // Update maxExploration for bridge
-    bridgeTile.maxExploration = GAME_CONFIG.EXPLORATION.CLICKS_REQUIRED.TRACK; // Same as track for now
+    // If it was a safe tile (peeked), keep it peeked?
+    // If it was void, it might be hidden.
+    // Let's ensure it's somewhat visible or discoverable? 
+    // Actually, just keep existing visibility state, but ensure properties are set.
+
+    bridgeTile.maxExploration = GAME_CONFIG.EXPLORATION.CLICKS_REQUIRED.TRACK;
+    bridgeTile.scavengeLeft = 0;
+    bridgeTile.hp = 0;
+    bridgeTile.attack = 0;
   }
 
   // 9. Final Peek Update

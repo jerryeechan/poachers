@@ -1,6 +1,6 @@
 import React from 'react';
 import { Flame, Droplets, Wind, Coins, Trees, Mountain, Train, Users } from 'lucide-react';
-import { Inventory, WeatherType, ViewState } from '../types';
+import { Inventory, WeatherType, ViewState, NPCData } from '../types';
 import { GAME_CONFIG } from '../constants';
 
 interface HeaderProps {
@@ -13,7 +13,7 @@ interface HeaderProps {
   pressure: number;
   targetPressure: number;
   viewState: ViewState;
-  rescuedNPCs: { buff: 'stamina' | 'health' | 'attack' }[];
+  rescuedNPCs: NPCData[];
   maxTrainCapacity: number;
   onAddFuel: (type: 'wood' | 'charcoal') => void;
   onDepart: () => void;

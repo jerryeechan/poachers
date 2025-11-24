@@ -1,4 +1,4 @@
-import { Tile as TileType, Inventory, ItemType, ViewState, WeatherType } from '../types';
+import { Tile as TileType, Inventory, ItemType, ViewState, WeatherType, NPCData } from '../types';
 import { TILE_TYPES, GAME_CONFIG } from '../constants';
 import { hasResources } from './inventory';
 
@@ -13,7 +13,7 @@ export interface TileActionContext {
     energy: number;
     weather: WeatherType;
     viewState: ViewState;
-    rescuedNPCs: { buff: 'stamina' | 'health' | 'attack' }[];
+    rescuedNPCs: NPCData[];
     maxTrainCapacity: number;
     selectedSlot: number | undefined;
 }
@@ -69,6 +69,7 @@ const COST_CALCULATORS: Record<string, CostCalculator> = {
     locomotive: zeroCostCalculator,
     workshop_carriage: zeroCostCalculator,
     cargo_carriage: zeroCostCalculator,
+    passenger_carriage: zeroCostCalculator,
 };
 
 /**
@@ -241,7 +242,7 @@ export function canClickTile(tile: TileType, viewState: ViewState): boolean {
 
         const isScavengeableTree = tile.type === 'tree' && tile.scavengeLeft > 0;
         const isBrokenTrack = tile.type === 'track' && tile.isBroken;
-        const isCarriage = tile.type === 'locomotive' || tile.type === 'workshop_carriage' || tile.type === 'cargo_carriage';
+        const isCarriage = tile.type === 'locomotive' || tile.type === 'workshop_carriage' || tile.type === 'cargo_carriage' || tile.type === 'passenger_carriage';
 
         if (!isScavengeableTree && !isBrokenTrack && !isCarriage) {
             console.log("Cleared tile clicked");

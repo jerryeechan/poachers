@@ -2,7 +2,7 @@ import { LucideIcon } from 'lucide-react';
 
 export type ResourceType = 'wood' | 'stone' | 'charcoal';
 export type ToolType = 'axe' | 'pickaxe' | 'bow';
-export type TileTypeStr = 'void' | 'track' | 'search' | 'train' | 'tree' | 'rock' | 'enemy' | 'npc' | 'locomotive' | 'workshop_carriage' | 'cargo_carriage' | 'bridge';
+export type TileTypeStr = 'void' | 'track' | 'search' | 'train' | 'tree' | 'rock' | 'enemy' | 'npc' | 'locomotive' | 'workshop_carriage' | 'cargo_carriage' | 'passenger_carriage' | 'bridge';
 export type WeatherType = 'sunny' | 'rain' | 'windy';
 export type ViewState = 'map' | 'shop' | 'gameover';
 
@@ -66,6 +66,8 @@ export interface Tile {
   isBroken?: boolean;
   repairProgress?: number;
   maxRepairProgress?: number;
+  attackProgress?: number;
+  maxAttackProgress?: number;
 }
 
 export interface Recipe {
@@ -98,4 +100,11 @@ export interface GameStats {
   itemsCrafted: number;
   stationsPassed: number;
   san: number; // Sanity - affects enemy spawn rate
+}
+
+export interface NPCData {
+  id: string;
+  name: string;
+  status: 'healthy' | 'injured' | 'exhausted';
+  buff: BuffType;
 }

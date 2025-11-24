@@ -1,6 +1,6 @@
 import {
   Train, Trees, MoreHorizontal, Mountain, Skull, Search,
-  Axe, Pickaxe, Crosshair, Flame, Box, Gem, User, Key, Grape, Hammer
+  Axe, Pickaxe, Crosshair, Flame, Box, Gem, User, Key, Grape, Hammer, Users
 } from 'lucide-react';
 import { Recipe, TileConfig, TileTypeStr, ItemType } from './types';
 
@@ -10,7 +10,7 @@ export const MAX_HP = 20;
 export const MAX_TOOL_DURABILITY = 5;
 export const BASE_CAPACITY = 20;
 export const CARRIAGE_CAPACITY_BONUS = 10;
-export const INVENTORY_SIZE = 10;
+export const INVENTORY_SIZE = 8;
 
 export const ITEM_CONFIG: Record<ItemType, { name: string; icon: any; maxStack: number; desc: string }> = {
   wood: { name: 'Wood', icon: Trees, maxStack: 64, desc: 'Basic building material' },
@@ -57,6 +57,7 @@ export const GAME_CONFIG = {
       LOCOMOTIVE: 0,
       WORKSHOP_CARRIAGE: 0,
       CARGO_CARRIAGE: 0,
+      PASSENGER_CARRIAGE: 0,
       VOID: 0,
     },
     REWARD: {
@@ -93,6 +94,7 @@ export const GAME_CONFIG = {
     },
     ENEMIES: {
       ATTACK_MIN: 1, ATTACK_VAR: 2,
+      PASSIVE_ATTACK_INTERVAL: 30, // Minutes
       HP_MIN: 1, HP_VAR: 2,
       LEVEL_CONFIG: {
         BASE: 0,
@@ -193,6 +195,7 @@ export const TILE_TYPES: Record<string, TileConfig> = {
   LOCOMOTIVE: { id: 'locomotive', icon: Train, color: 'bg-amber-600 text-stone-900 shadow-[0_0_15px_rgba(245,158,11,0.4)] ring-2 ring-amber-500/50' },
   WORKSHOP_CARRIAGE: { id: 'workshop_carriage', icon: Hammer, color: 'bg-amber-700 text-stone-900 shadow-[0_0_10px_rgba(245,158,11,0.3)] ring-1 ring-amber-500/50' },
   CARGO_CARRIAGE: { id: 'cargo_carriage', icon: Box, color: 'bg-amber-800 text-stone-900 shadow-[0_0_10px_rgba(245,158,11,0.3)] ring-1 ring-amber-500/50' },
+  PASSENGER_CARRIAGE: { id: 'passenger_carriage', icon: Users, color: 'bg-amber-700 text-stone-900 shadow-[0_0_10px_rgba(245,158,11,0.3)] ring-1 ring-amber-500/50' },
   BRIDGE: { id: 'bridge', icon: MoreHorizontal, color: 'bg-stone-800 text-stone-500 border-stone-700 border-dashed' },
 };
 
