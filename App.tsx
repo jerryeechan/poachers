@@ -39,6 +39,7 @@ export default function App() {
   const [energy, setEnergy] = useState(MAX_ENERGY);
   const [hp, setHp] = useState(MAX_HP);
   const [gold, setGold] = useState(0);
+  const [time, setTime] = useState(360); // 6:00 AM in minutes
 
   // Inventory State
   const [inventory, setInventory] = useState<Inventory>(Array(INVENTORY_SIZE).fill(null));
@@ -97,6 +98,26 @@ export default function App() {
   }, []);
 
   const [selectedSlot, setSelectedSlot] = useState<number | undefined>(undefined);
+
+  // Time Management
+  const advanceTime = useCallback((minutes: number) => {
+    setTime(prevTime => {
+      const newTime = prevTime + minutes;
+
+      // Check for midnight crossing (1440 minutes = 24:00)
+      if (prevTime < 1440 && newTime >= 1440) {
+        addLog("It's midnight. You should rest.", "important");
+      }
+
+      // Late night penalty
+      if (prevTime >= 1440) {
+        setGameStats(prev => ({ ...prev, san: prev.san + 5 }));
+        addLog("Staying up late is draining your sanity... (+5 SAN)", "warning");
+      }
+
+      return newTime;
+    });
+  }, [addLog]);
 
   // Inventory Helpers (Refactored to be pure-ish)
   // Removed local implementations, using imported ones from utils/inventory.ts
@@ -162,6 +183,7 @@ export default function App() {
     // Exploration Logic
     if (!tile.revealed && tile.peeked) {
       setEnergy(prev => prev - cost);
+      advanceTime(10);
 
       const newGrid = [...grid];
       const targetTileIndex = newGrid.findIndex(t => t.id === tile.id);
@@ -233,6 +255,7 @@ export default function App() {
         if (item) {
           const res = addToInventory(cargoStorage, item.type, item.count, item.durability);
           setCargoStorage(res.newInv);
+          advanceTime(10);
 
           const addedCount = res.added;
           if (addedCount > 0) {
@@ -250,8 +273,8 @@ export default function App() {
       return;
     }
 
-    // Broken Track Repair Logic (special case that returns early)
-    if (tile.type === 'track' && tile.isBroken) {
+    // Repair Logic (Track & Bridge)
+    if ((tile.type === 'track' || tile.type === 'bridge') && tile.isBroken) {
       const woodCost = GAME_CONFIG.MAP.BROKEN_TRACKS.REPAIR_COST_WOOD;
       const stoneCost = GAME_CONFIG.MAP.BROKEN_TRACKS.REPAIR_COST_STONE;
 
@@ -265,17 +288,30 @@ export default function App() {
       const { newInv, success } = consumeResources(inventory, requirements);
 
       if (!success) {
-        // Should be caught by validator, but double check
         addLog("Insufficient resources to repair!", "error");
         return;
       }
 
       setEnergy(prev => prev - cost);
       setInventory(newInv);
+      advanceTime(10);
 
-      // Fix track
-      setGrid(prev => prev.map(t => t.id === tile.id ? { ...t, isBroken: false, effect: 'pop' } : t));
-      addLog("Track repaired!", "success");
+      // Update Repair Progress
+      setGrid(prev => prev.map(t => {
+        if (t.id === tile.id) {
+          const newProgress = (t.repairProgress || 0) + 1;
+          const maxProgress = t.maxRepairProgress || GAME_CONFIG.MAP.BROKEN_TRACKS.REPAIR_CLICKS;
+
+          if (newProgress >= maxProgress) {
+            addLog(`${tile.type === 'bridge' ? 'Bridge' : 'Track'} repaired!`, "success");
+            return { ...t, isBroken: false, effect: 'pop', repairProgress: undefined };
+          } else {
+            addLog(`Repairing... (${newProgress}/${maxProgress})`, "neutral");
+            return { ...t, repairProgress: newProgress, maxRepairProgress: maxProgress, effect: 'pop' };
+          }
+        }
+        return t;
+      }));
       return;
     }
 
@@ -296,6 +332,7 @@ export default function App() {
     }
 
     setEnergy(prev => prev - cost);
+    advanceTime(10);
 
     let tempInv = [...inventory];
     const newGrid = [...grid];
@@ -415,6 +452,7 @@ export default function App() {
         setInventory(res.newInv);
         setHp(prev => Math.min(prev + (GAME_CONFIG.ITEMS.BERRY.HEAL), buffedMaxHp));
         setEnergy(prev => Math.min(prev + energyChange, buffedMaxEnergy));
+        advanceTime(10);
 
         // If run out, deselect
         if (item.count <= 1) {
@@ -456,6 +494,7 @@ export default function App() {
 
     // Increment day and sanity
     setDay(prev => prev + 1);
+    setTime(360); // Reset to 6:00 AM
     setGameStats(prev => ({ ...prev, san: prev.san + 50 }));
 
     // Handle spawned enemies from enemy spawn rate
@@ -554,6 +593,7 @@ export default function App() {
       setInventory(res.newInv);
       const gain = type === 'wood' ? GAME_CONFIG.TRAIN.FUEL_GAIN_WOOD : GAME_CONFIG.TRAIN.FUEL_GAIN_CHARCOAL;
       setPressure(prev => Math.min(prev + gain, targetPressure));
+      advanceTime(10);
     } else {
       addLog(`No ${type} available`, "error");
     }
@@ -568,6 +608,7 @@ export default function App() {
 
     setViewState('shop');
     addLog("Arrived at Trading Post...", "important");
+    advanceTime(10);
   };
 
   const nextLevel = () => {
@@ -588,6 +629,7 @@ export default function App() {
         type === 'wood' ? GAME_CONFIG.SHOP.SELL.WOOD :
           GAME_CONFIG.SHOP.SELL.STONE;
       setGold(prev => prev + price);
+      advanceTime(10);
     }
   };
 
@@ -597,6 +639,7 @@ export default function App() {
       setGold(prev => prev - cost);
       setCarriageLevel(prev => prev + 1);
       addLog("Carriage Upgraded!", "success");
+      advanceTime(10);
     } else {
       addLog("Not enough Gold", "error");
     }
@@ -613,6 +656,7 @@ export default function App() {
       setHp(buffedMaxHp);
       setEnergy(buffedMaxEnergy);
       addLog("Rations consumed. Full recovery.", "success");
+      advanceTime(10);
     } else {
       addLog("Not enough Gold", "error");
     }
@@ -621,6 +665,7 @@ export default function App() {
   const restartGame = () => {
     setStation(1);
     setDay(1);
+    setTime(360);
     setEnergy(MAX_ENERGY);
     setHp(MAX_HP);
     setGold(0);
@@ -714,6 +759,7 @@ export default function App() {
         maxTrainCapacity={maxTrainCapacity}
         onAddFuel={addFuel}
         onDepart={depart}
+        time={time}
       />
 
       <main className="flex-1 overflow-hidden flex flex-col lg:flex-row relative">
@@ -746,7 +792,7 @@ export default function App() {
           <div className="flex-1 overflow-auto p-4 flex items-center justify-center custom-scrollbar">
             <div className="grid grid-cols-8 gap-2 sm:gap-3 p-4 bg-stone-900 rounded-2xl shadow-2xl border border-stone-800">
               {grid.map((tile) => {
-                // Check for adjacent enemies
+                // Check for adjacent enemies or broken bridges
                 let isBlocked = false;
                 if (tile.type !== 'enemy') {
                   const neighbors = [
@@ -755,7 +801,33 @@ export default function App() {
                     grid.find(t => t.x === tile.x - 1 && t.y === tile.y), // Left
                     grid.find(t => t.x === tile.x + 1 && t.y === tile.y)  // Right
                   ];
-                  isBlocked = neighbors.some(n => n && n.type === 'enemy' && n.revealed && !n.cleared);
+
+                  // Blocked if any neighbor is an active enemy
+                  const enemyBlocked = neighbors.some(n => n && n.type === 'enemy' && n.revealed && !n.cleared);
+
+                  // Also blocked if adjacent to a broken bridge (unless we are ON the bridge, but we can't be on a broken bridge usually)
+                  // Actually, if a tile is adjacent to a broken bridge, can we enter it? 
+                  // The user said: "if broken bridge is not repaired, cannot pass to surrounding tiles".
+                  // This sounds like the bridge itself is the blocker? Or the bridge blocks movement *through* it?
+                  // "Like enemy block behavior" implies if I am next to a broken bridge, I cannot click the broken bridge? 
+                  // Or I cannot click tiles *around* the broken bridge?
+                  // Enemy block: "If a tile is blocked by an enemy, the 'block' icon is displayed on top... prevent users from attempting to click on tiles that are visually marked as explorable".
+                  // So if I am at (0,0) and (0,1) is an enemy, I cannot click (0,0)? No, I cannot click (0,1)?
+                  // The current code says: `isBlocked = neighbors.some(n => n && n.type === 'enemy' ...)`
+                  // This means if I am `tile`, and I have a neighbor that is an enemy, `tile` is blocked.
+                  // So if I am adjacent to an enemy, I am blocked.
+                  // So if I am adjacent to a broken bridge, I am blocked? That seems harsh.
+                  // Maybe the user means the bridge *itself* is blocked?
+                  // "If broken bridge not repaired, cannot go to surrounding tiles" -> "cannot go past it".
+                  // Let's assume the user means: If a tile is adjacent to a broken bridge, you cannot enter that tile? 
+                  // Or does it mean the bridge acts like an enemy and blocks its neighbors?
+                  // "and enemy's block behavior is a bit like" -> "similar to enemy block behavior".
+                  // Enemy block behavior: Neighboring tiles of an enemy are blocked.
+                  // So: Neighboring tiles of a broken bridge are blocked.
+
+                  const bridgeBlocked = neighbors.some(n => n && n.type === 'bridge' && n.isBroken && n.revealed);
+
+                  isBlocked = enemyBlocked || bridgeBlocked;
                 }
 
                 return (
@@ -795,6 +867,15 @@ export default function App() {
             avatar={getAvatarFace(hp, buffedMaxHp, energy, buffedMaxEnergy)}
             attack={selectedSlot !== undefined && inventory[selectedSlot]?.type === 'bow' ? GAME_CONFIG.ACTIONS.BOW_DMG : buffedAttack}
             onRest={handleRest}
+            onNap={() => {
+              if (energy >= buffedMaxEnergy) {
+                addLog("Already fully rested!", "neutral");
+                return;
+              }
+              setEnergy(prev => Math.min(prev + 10, buffedMaxEnergy));
+              advanceTime(30);
+              addLog("Took a nap. (+10 Stamina)", "success");
+            }}
             isExhausted={isExhausted}
             logs={logs}
             onLogClick={() => setShowLogModal(true)}
@@ -835,6 +916,7 @@ export default function App() {
       {showWorkshopModal && (
         <WorkshopModal
           inventory={inventory}
+          cargo={cargoStorage}
           energy={energy}
           onCraft={craftItem}
           onClose={() => setShowWorkshopModal(false)}
@@ -864,6 +946,7 @@ export default function App() {
                 const removeRes = removeFromInventory(cargoStorage, item.type, added);
                 setCargoStorage(removeRes.newInv);
                 addLog(`Retrieved ${added} ${item.type}`, "success");
+                advanceTime(10);
               } else {
                 addLog("Inventory full!", "error");
               }

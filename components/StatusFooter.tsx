@@ -13,6 +13,7 @@ interface StatusFooterProps {
     attack: number;
     isExhausted?: boolean;
     onRest: () => void;
+    onNap: () => void;
     logs?: LogEntry[];
     onLogClick?: () => void;
     onAvatarClick?: () => void;
@@ -28,6 +29,7 @@ export const StatusFooter: React.FC<StatusFooterProps> = ({
     avatar,
     attack,
     onRest,
+    onNap,
     isExhausted,
     logs,
     onLogClick,
@@ -98,13 +100,24 @@ export const StatusFooter: React.FC<StatusFooterProps> = ({
                 </button>
             )}
 
-            <button
-                onClick={onRest}
-                className={`bg-blue-700 hover:bg-blue-600 text-white px-6 py-3 rounded-xl text-xs font-bold transition-all shadow-lg hover:shadow-blue-900/50 flex flex-col items-center gap-1 min-w-[80px] border-b-4 border-blue-900 active:border-b-0 active:translate-y-1 ${isExhausted ? 'animate-bounce ring-2 ring-red-500 shadow-red-500/50' : ''}`}
-            >
-                <Tent size={20} />
-                <span>REST</span>
-            </button>
+            <div className="flex flex-col gap-2">
+                <button
+                    onClick={onRest}
+                    className={`bg-indigo-900 hover:bg-indigo-800 text-white px-4 py-2 rounded-lg text-[10px] font-bold transition-all shadow-lg hover:shadow-indigo-900/50 flex items-center justify-center gap-2 border-b-2 border-indigo-950 active:border-b-0 active:translate-y-0.5 ${isExhausted ? 'animate-bounce ring-2 ring-red-500 shadow-red-500/50' : ''}`}
+                    title="Sleep until morning (Full Restore, New Day)"
+                >
+                    <Tent size={14} />
+                    <span>SLEEP</span>
+                </button>
+                <button
+                    onClick={onNap}
+                    className="bg-stone-800 hover:bg-stone-700 text-stone-300 px-4 py-2 rounded-lg text-[10px] font-bold transition-all shadow flex items-center justify-center gap-2 border-b-2 border-stone-950 active:border-b-0 active:translate-y-0.5"
+                    title="Take a short nap (+10 Stamina, +30 mins)"
+                >
+                    <Zap size={14} className="text-yellow-500" />
+                    <span>NAP</span>
+                </button>
+            </div>
         </div >
     );
 };

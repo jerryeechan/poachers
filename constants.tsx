@@ -108,8 +108,9 @@ export const GAME_CONFIG = {
     BROKEN_TRACKS: {
       BASE: 1,
       PER_SECTOR: 1,
-      REPAIR_COST_WOOD: 3,
-      REPAIR_COST_STONE: 3,
+      REPAIR_COST_WOOD: 1,
+      REPAIR_COST_STONE: 1,
+      REPAIR_CLICKS: 3,
     },
     DECK: {
       TREE_PCT: 0.30,
@@ -192,6 +193,7 @@ export const TILE_TYPES: Record<string, TileConfig> = {
   LOCOMOTIVE: { id: 'locomotive', icon: Train, color: 'bg-amber-600 text-stone-900 shadow-[0_0_15px_rgba(245,158,11,0.4)] ring-2 ring-amber-500/50' },
   WORKSHOP_CARRIAGE: { id: 'workshop_carriage', icon: Hammer, color: 'bg-amber-700 text-stone-900 shadow-[0_0_10px_rgba(245,158,11,0.3)] ring-1 ring-amber-500/50' },
   CARGO_CARRIAGE: { id: 'cargo_carriage', icon: Box, color: 'bg-amber-800 text-stone-900 shadow-[0_0_10px_rgba(245,158,11,0.3)] ring-1 ring-amber-500/50' },
+  BRIDGE: { id: 'bridge', icon: MoreHorizontal, color: 'bg-stone-800 text-stone-500 border-stone-700 border-dashed' },
 };
 
 export const getTileConfig = (type: TileTypeStr): TileConfig => {

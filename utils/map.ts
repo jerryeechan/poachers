@@ -261,6 +261,22 @@ export const generateLevel = (station: number, san: number = 0): TileType[] => {
     trackTiles[i].isBroken = true;
   }
 
+  // 10. Broken Bridge (Exactly 1)
+  // We convert one of the broken tracks into a broken bridge if possible, or just a random track if no broken tracks (though there should be)
+  // Actually, let's just pick a random track (broken or not) and make it a bridge.
+  // But the user said "generate 1 broken bridge".
+  // Let's ensure at least one track is a bridge.
+  if (trackTiles.length > 0) {
+    // Pick a random track to be a bridge
+    const bridgeIndex = Math.floor(Math.random() * trackTiles.length);
+    const bridgeTile = trackTiles[bridgeIndex];
+    bridgeTile.type = 'bridge';
+    bridgeTile.isBroken = true;
+
+    // Update maxExploration for bridge
+    bridgeTile.maxExploration = GAME_CONFIG.EXPLORATION.CLICKS_REQUIRED.TRACK; // Same as track for now
+  }
+
   // 9. Final Peek Update
   updatePeekStatus(newGrid);
 

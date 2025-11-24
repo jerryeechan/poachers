@@ -17,6 +17,7 @@ interface HeaderProps {
   maxTrainCapacity: number;
   onAddFuel: (type: 'wood' | 'charcoal') => void;
   onDepart: () => void;
+  time: number;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -32,7 +33,8 @@ export const Header: React.FC<HeaderProps> = ({
   rescuedNPCs,
   maxTrainCapacity,
   onAddFuel,
-  onDepart
+  onDepart,
+  time
 }) => {
   // Helper to get count
   const getCount = (type: string) => inventory.reduce((acc, item) => (item?.type === type ? acc + item.count : acc), 0);
@@ -41,6 +43,15 @@ export const Header: React.FC<HeaderProps> = ({
 
   // Calculate dice count
   const diceCount = 1 + Math.floor(san / 100);
+
+  // Format Time
+  const formatTime = (minutes: number) => {
+    const h = Math.floor(minutes / 60) % 24;
+    const m = minutes % 60;
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    const displayH = h % 12 || 12;
+    return `${displayH}:${m.toString().padStart(2, '0')} ${ampm}`;
+  };
 
   return (
     <header className="bg-stone-900 border-b border-stone-800 p-3 shadow-xl z-20 shrink-0">
@@ -57,24 +68,14 @@ export const Header: React.FC<HeaderProps> = ({
             <div className="bg-stone-800 px-3 py-1 rounded-full border border-stone-700 flex items-center gap-2">
               <span className="font-bold text-purple-400 text-sm">SAN: {san}</span>
             </div>
+            <div className="bg-stone-800 px-3 py-1 rounded-full border border-stone-700 flex items-center gap-2">
+              <span className="font-bold text-stone-300 text-sm">{formatTime(time)}</span>
+            </div>
             <div className="bg-stone-800/50 px-3 py-1 rounded-full border border-red-700/50 flex items-center gap-2">
               <span className="font-bold text-red-400 text-[10px] uppercase tracking-wider">Danger Dice: {diceCount}</span>
             </div>
-            {/* <div className="flex gap-2 items-center text-stone-400 bg-stone-800/50 px-2 py-1 rounded-full">
-              {weather === 'sunny' ? <Flame size={12} className="text-amber-400" /> :
-                weather === 'rain' ? <Droplets size={12} className="text-blue-400" /> :
-                  <Wind size={12} className="text-slate-400" />}
-              <span className="uppercase text-[10px] font-bold tracking-wider">
-                {weather === 'sunny' ? 'Clear' : weather === 'rain' ? 'Rain' : 'Windy'}
-              </span>
-            </div> */}
           </div>
           <div className="flex items-center gap-2">
-            {/* Train Capacity */}
-            {/* <div className="flex items-center gap-1 text-blue-400 font-mono text-sm border border-blue-500/30 bg-blue-500/10 px-3 py-1 rounded-full">
-              <Users size={14} />
-              <span className="font-bold">{rescuedNPCs.length}/{maxTrainCapacity}</span>
-            </div> */}
             <div className="flex items-center gap-1 text-yellow-400 font-mono text-sm border border-yellow-500/30 bg-yellow-500/10 px-3 py-1 rounded-full">
               <Coins size={14} />
               <span className="font-bold">{gold} G</span>
@@ -82,8 +83,8 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-2 sm:gap-4">
-          {/* Resource Counts (Fuel) */}
+        {/* <div className="flex items-center gap-2 sm:gap-4">
+          //fuel
           <div className="flex gap-2 sm:gap-3 items-center">
             <div className="flex items-center gap-1 bg-stone-800 px-2 py-1 rounded-md border border-stone-700 group transition-colors hover:border-emerald-500/50">
               <Trees size={14} className="text-emerald-500" />
@@ -94,7 +95,7 @@ export const Header: React.FC<HeaderProps> = ({
               <span className="font-mono text-sm min-w-[20px] text-center">{charcoalCount}</span>
             </div>
           </div>
-        </div>
+        </div> */}
       </div>
     </header>
   );

@@ -2,7 +2,7 @@ import { LucideIcon } from 'lucide-react';
 
 export type ResourceType = 'wood' | 'stone' | 'charcoal';
 export type ToolType = 'axe' | 'pickaxe' | 'bow';
-export type TileTypeStr = 'void' | 'track' | 'search' | 'train' | 'tree' | 'rock' | 'enemy' | 'npc' | 'locomotive' | 'workshop_carriage' | 'cargo_carriage';
+export type TileTypeStr = 'void' | 'track' | 'search' | 'train' | 'tree' | 'rock' | 'enemy' | 'npc' | 'locomotive' | 'workshop_carriage' | 'cargo_carriage' | 'bridge';
 export type WeatherType = 'sunny' | 'rain' | 'windy';
 export type ViewState = 'map' | 'shop' | 'gameover';
 
@@ -64,6 +64,8 @@ export interface Tile {
   rescueProgress?: number;
   maxRescueProgress?: number;
   isBroken?: boolean;
+  repairProgress?: number;
+  maxRepairProgress?: number;
 }
 
 export interface Recipe {

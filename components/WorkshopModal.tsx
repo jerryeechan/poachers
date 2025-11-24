@@ -5,6 +5,7 @@ import { RECIPES, MAX_TOOL_DURABILITY } from '../constants';
 
 interface WorkshopModalProps {
     inventory: Inventory;
+    cargo: Inventory;
     energy: number;
     onCraft: (key: string) => void;
     onClose: () => void;
@@ -12,15 +13,22 @@ interface WorkshopModalProps {
 
 export const WorkshopModal: React.FC<WorkshopModalProps> = ({
     inventory,
+    cargo,
     energy,
     onCraft,
     onClose
 }) => {
     // Helper to get count
-    const getCount = (type: string) => inventory.reduce((acc, item) => (item?.type === type ? acc + item.count : acc), 0);
+    const getCount = (type: string) => {
+        const invCount = inventory.reduce((acc, item) => (item?.type === type ? acc + item.count : acc), 0);
+        const cargoCount = cargo.reduce((acc, item) => (item?.type === type ? acc + item.count : acc), 0);
+        return invCount + cargoCount;
+    };
 
-    // Helper to find tool
-    const findTool = (type: string) => inventory.find(item => item?.type === type);
+    // Helper to find tool (check both, prioritize inventory)
+    const findTool = (type: string) => {
+        return inventory.find(item => item?.type === type) || cargo.find(item => item?.type === type);
+    };
 
     return (
         <div

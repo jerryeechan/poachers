@@ -66,15 +66,24 @@ const ScavengeOverlay: React.FC<{ tile: TileInterface }> = ({ tile }) => (
   </div>
 );
 
-const BrokenTrackOverlay: React.FC<{ hasWood: boolean; hasStone: boolean }> = ({ hasWood, hasStone }) => (
-  <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/40 rounded-xl backdrop-blur-[1px]">
-    <Hammer className="text-amber-500 animate-pulse drop-shadow-lg" size={20} />
-    <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 flex gap-1 bg-stone-900 px-1.5 py-0.5 rounded-full border border-stone-700 shadow-xl z-30 whitespace-nowrap">
-      <div className={`flex items-center gap-0.5 text-[10px] font-bold font-mono ${hasWood ? 'text-emerald-400' : 'text-red-400'}`}>
-        <Trees size={10} />3
+const RepairOverlay: React.FC<{ hasWood: boolean; hasStone: boolean; progress: number; maxProgress: number }> = ({ hasWood, hasStone, progress, maxProgress }) => (
+  <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/40 rounded-xl backdrop-blur-[1px]">
+    <Hammer className="text-amber-500 animate-pulse drop-shadow-lg mb-1" size={16} />
+
+    {/* Progress Bar */}
+    <div className="w-[80%] h-1 bg-stone-900 rounded-full overflow-hidden mb-1 border border-stone-700">
+      <div
+        className="h-full bg-amber-500 transition-all duration-300"
+        style={{ width: `${(progress / maxProgress) * 100}%` }}
+      />
+    </div>
+
+    <div className="flex gap-1 bg-stone-900 px-1.5 py-0.5 rounded-full border border-stone-700 shadow-xl z-30 whitespace-nowrap">
+      <div className={`flex items-center gap-0.5 text-[8px] font-bold font-mono ${hasWood ? 'text-emerald-400' : 'text-red-400'}`}>
+        <Trees size={8} />1
       </div>
-      <div className={`flex items-center gap-0.5 text-[10px] font-bold font-mono ${hasStone ? 'text-emerald-400' : 'text-red-400'}`}>
-        <Gem size={10} />3
+      <div className={`flex items-center gap-0.5 text-[8px] font-bold font-mono ${hasStone ? 'text-emerald-400' : 'text-red-400'}`}>
+        <Gem size={8} />1
       </div>
     </div>
   </div>
@@ -152,7 +161,7 @@ export const Tile: React.FC<TileProps> = ({ tile, inventory, weather, energy, re
     actionCost = GAME_CONFIG.ACTIONS.SEARCH_COST_INITIAL + (tileSearchCount * GAME_CONFIG.ACTIONS.SEARCH_COST_INCREASE);
   } else if (tile.type === 'enemy') {
     actionCost = GAME_CONFIG.ACTIONS.ENEMY_COST;
-  } else if (tile.type === 'track' && tile.isBroken) {
+  } else if ((tile.type === 'track' || tile.type === 'bridge') && tile.isBroken) {
     actionCost = GAME_CONFIG.ACTIONS.COST_BASE;
   }
 
@@ -170,8 +179,8 @@ export const Tile: React.FC<TileProps> = ({ tile, inventory, weather, energy, re
   const isInteractable = !isBlocked && (
     isPeeked || // Can always explore peeked tiles
     (isRevealed && (
-      (tile.type === 'track' && tile.isBroken) ||
-      (tile.type !== 'track' && (
+      ((tile.type === 'track' || tile.type === 'bridge') && tile.isBroken) ||
+      (tile.type !== 'track' && tile.type !== 'bridge' && (
         !tile.cleared ||
         tile.type === 'locomotive' ||
         tile.type === 'workshop_carriage' ||
@@ -182,7 +191,7 @@ export const Tile: React.FC<TileProps> = ({ tile, inventory, weather, energy, re
     ))
   );
 
-  const showStaminaCost = isInteractable && tile.type !== 'track';
+  const showStaminaCost = isInteractable && tile.type !== 'track' && tile.type !== 'bridge';
 
   // 3. Determine Styles
   let containerClass = `
@@ -205,7 +214,7 @@ export const Tile: React.FC<TileProps> = ({ tile, inventory, weather, energy, re
       containerClass += ` ${config.color} shadow-md border-2`;
       containerClass += tile.type === 'track' ? ' border-transparent' : ' border-black/10';
 
-      if (tile.type === 'track' && tile.isBroken) {
+      if ((tile.type === 'track' || tile.type === 'bridge') && tile.isBroken) {
         containerClass += ' border-amber-900/50 bg-amber-950/30'; // Visual cue for broken
       }
 
@@ -251,12 +260,15 @@ export const Tile: React.FC<TileProps> = ({ tile, inventory, weather, energy, re
 
           {tile.scavengeLeft > 0 && (tile.type === 'tree') && <ScavengeOverlay tile={tile} />}
 
-          {tile.type === 'track' && tile.isBroken && (() => {
+          {((tile.type === 'track' || tile.type === 'bridge') && tile.isBroken) && (() => {
             const woodCost = GAME_CONFIG.MAP.BROKEN_TRACKS.REPAIR_COST_WOOD;
             const stoneCost = GAME_CONFIG.MAP.BROKEN_TRACKS.REPAIR_COST_STONE;
             const woodCount = inventory.find(i => i?.type === 'wood')?.count || 0;
             const stoneCount = inventory.find(i => i?.type === 'stone')?.count || 0;
-            return <BrokenTrackOverlay hasWood={woodCount >= woodCost} hasStone={stoneCount >= stoneCost} />;
+            const progress = tile.repairProgress || 0;
+            const maxProgress = tile.maxRepairProgress || GAME_CONFIG.MAP.BROKEN_TRACKS.REPAIR_CLICKS;
+
+            return <RepairOverlay hasWood={woodCount >= woodCost} hasStone={stoneCount >= stoneCost} progress={progress} maxProgress={maxProgress} />;
           })()}
 
           {/* Train NPC Count Badge */}
