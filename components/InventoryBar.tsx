@@ -32,13 +32,13 @@ export const InventoryBar: React.FC<InventoryBarProps> = ({ inventory, selectedS
                 </div>
 
                 {/* Craft Button */}
-                <button
+                {/* <button
                     onClick={onCraftClick}
                     className="w-10 h-10 sm:w-12 sm:h-12 bg-amber-900 hover:bg-amber-800 border-2 border-amber-700 hover:border-amber-600 rounded-md flex items-center justify-center transition-all shadow-lg hover:shadow-amber-900/50"
                     title="Open Field Workshop"
                 >
                     <Hammer className="w-5 h-5 sm:w-6 sm:h-6 text-amber-200" />
-                </button>
+                </button> */}
             </div>
 
             {/* Cargo Capacity Display */}

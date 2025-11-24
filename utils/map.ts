@@ -12,7 +12,7 @@ const isLightSource = (tile: TileType | undefined): boolean => {
   // if (!tile || !tile.revealed) return false;
   // Void, Track, Train are always transparent. 
   // Other types are only transparent if cleared (which usually converts them to 'empty', but checking cleared is safer)
-  return tile.type === 'train' || tile.cleared || tile.revealed;
+  return tile.type === 'train' || tile.type === 'locomotive' || tile.type === 'workshop_carriage' || tile.type === 'cargo_carriage' || tile.cleared || tile.revealed;
   // return tile.type === 'void' || tile.type === 'train' || tile.type === 'search' || tile.cleared;
   // return tile.type === 'void' || tile.type === 'track' || tile.type === 'train' || tile.type === 'search' || tile.cleared;
 };
@@ -69,21 +69,27 @@ export const generateLevel = (station: number, san: number = 0): TileType[] => {
   const centerX = 3;
   const centerY = 3;
 
+  // 1. Initialize Grid with Void/Track/Train/Search(Placeholder)
   for (let y = 0; y < GRID_SIZE; y++) {
     for (let x = 0; x < GRID_SIZE; x++) {
       let type: any = 'search';
       let revealed = false;
       let cleared = false;
-      let scavengeLeft = 0;
-      let attack = 0;
-      let hp = 0;
 
       const dist = Math.abs(x - centerX) + Math.abs(y - centerY);
       const isSafeZone = (y >= centerY - GAME_CONFIG.MAP.SAFE_ZONE_OFFSET && y <= centerY + GAME_CONFIG.MAP.SAFE_ZONE_OFFSET);
 
       if (y === centerY) {
-        if (x === centerX) {
-          type = 'train';
+        if (x === centerX + 1) {
+          type = 'locomotive';
+          revealed = true;
+          cleared = true;
+        } else if (x === centerX) {
+          type = 'workshop_carriage';
+          revealed = true;
+          cleared = true;
+        } else if (x === centerX - 1) {
+          type = 'cargo_carriage';
           revealed = true;
           cleared = true;
         } else {
@@ -92,44 +98,23 @@ export const generateLevel = (station: number, san: number = 0): TileType[] => {
           cleared = false;
         }
       } else {
+        // Void Logic
         let voidChance = 0;
         if (!isSafeZone) {
           voidChance = Math.max(0, (dist - GAME_CONFIG.MAP.VOID.DIST_THRESHOLD) * GAME_CONFIG.MAP.VOID.CHANCE_MULT);
         }
-
         if (Math.random() < voidChance) {
           type = 'void';
-        } else {
-          const rand = Math.random();
-          const probs = isSafeZone ? GAME_CONFIG.MAP.PROBS.SAFE : GAME_CONFIG.MAP.PROBS.DANGER;
-
-          if (rand < probs.TREE) {
-            type = 'tree';
-            scavengeLeft = Math.floor(Math.random() * GAME_CONFIG.MAP.LOOT.TREE_VAR) + GAME_CONFIG.MAP.LOOT.TREE_MIN;
-          } else if (rand < probs.ROCK) {
-            type = 'rock';
-          } else if (rand < (probs.ENEMY_BASE + (station * probs.ENEMY_SCALE))) {
-            type = 'enemy';
-            const level = calculateEnemyLevel(station, san);
-            attack = Math.floor(Math.random() * GAME_CONFIG.MAP.ENEMIES.ATTACK_VAR) +
-              GAME_CONFIG.MAP.ENEMIES.ATTACK_MIN +
-              level;
-            hp = Math.floor(Math.random() * GAME_CONFIG.MAP.ENEMIES.HP_VAR) +
-              GAME_CONFIG.MAP.ENEMIES.HP_MIN +
-              (level * 2);
-          } else {
-            scavengeLeft = Math.floor(Math.random() * GAME_CONFIG.MAP.LOOT.SCAVENGE_VAR) + GAME_CONFIG.MAP.LOOT.SCAVENGE_MIN;
-          }
         }
       }
 
+      // Initialize tile with default/placeholder values
       const configKey = type.toUpperCase() as keyof typeof GAME_CONFIG.EXPLORATION.CLICKS_REQUIRED;
       const maxExploration = GAME_CONFIG.EXPLORATION.CLICKS_REQUIRED[configKey] ?? 1;
 
       newGrid.push({
-        x, y, type, revealed, cleared, scavengeLeft, attack,
-        hp: type === 'enemy' ? hp : undefined,
-        maxHp: type === 'enemy' ? hp : undefined,
+        x, y, type, revealed, cleared,
+        scavengeLeft: 0, attack: 0, hp: 0, maxHp: 0,
         effect: null,
         id: `${x}-${y}`,
         peeked: false,
@@ -139,84 +124,144 @@ export const generateLevel = (station: number, san: number = 0): TileType[] => {
     }
   }
 
-  // --- FORCE SAFE START ---
-  // The tiles immediately adjacent to the train perpendicular to the track must be accessible
-  const startAccessible = [
+  // 2. Identify Available Slots (Non-Fixed, Non-Void)
+  // We exclude Train, Track, and Void.
+  let availableTiles = newGrid.filter(t =>
+    t.type !== 'train' &&
+    t.type !== 'locomotive' &&
+    t.type !== 'workshop_carriage' &&
+    t.type !== 'cargo_carriage' &&
+    t.type !== 'track' &&
+    t.type !== 'void'
+  );
+
+  // 3. Handle Safe Start (Force specific tiles to be safe/search)
+  // These are the tiles immediately adjacent to the train (up/down)
+  const safeStartCoords = [
     { x: centerX, y: centerY - 1 },
-    { x: centerX, y: centerY + 1 },
+    { x: centerX, y: centerY + 1 }
   ];
 
-  startAccessible.forEach(pos => {
+  const safeTiles: TileType[] = [];
+  safeStartCoords.forEach(pos => {
     const tile = newGrid.find(t => t.x === pos.x && t.y === pos.y);
-    if (tile) {
+    if (tile && tile.type !== 'void') {
       tile.type = 'search';
       tile.scavengeLeft = Math.floor(Math.random() * 2) + 2;
-      tile.cleared = false; // It's open ground
-      tile.revealed = false; // Not revealed yet
-      tile.peeked = true; // But explorable
+      tile.cleared = false;
+      tile.revealed = false;
+      tile.peeked = true; // Explorable
+      safeTiles.push(tile);
     }
   });
 
-  // --- FORCE EXACTLY 1 NPC PER SECTOR ---
-  // Find all non-void, non-track, non-train search tiles that could become NPCs
-  // Must be at least MIN_DISTANCE_FROM_TRAIN away from the train (using Manhattan distance: sum of x and y)
+  // Remove safe tiles from the deck pool
+  availableTiles = availableTiles.filter(t => !safeTiles.includes(t));
+
+  // 4. Handle NPC
+  // Must be at min distance
   const minDistance = GAME_CONFIG.MAP.NPC.MIN_DISTANCE_FROM_TRAIN;
-  const potentialNPCTiles = newGrid.filter(t => {
-    if (t.type !== 'search' || t.revealed || t.y === centerY) {
-      return false;
+  const minNPCs = GAME_CONFIG.MAP.DECK.MIN_NPCS;
+
+  for (let i = 0; i < minNPCs; i++) {
+    const npcCandidates = availableTiles.filter(t => {
+      const dist = Math.abs(t.x - centerX) + Math.abs(t.y - centerY);
+      return dist >= minDistance;
+    });
+
+    if (npcCandidates.length > 0) {
+      const npcTile = npcCandidates[Math.floor(Math.random() * npcCandidates.length)];
+      npcTile.type = 'npc';
+
+      // Assign NPC props
+      const buffs: ('stamina' | 'health' | 'attack')[] = ['stamina', 'health', 'attack'];
+      npcTile.npcBuff = buffs[Math.floor(Math.random() * buffs.length)];
+      const rescueTurns = Math.floor(Math.random() * GAME_CONFIG.MAP.NPC.RESCUE_TURNS_VAR) + GAME_CONFIG.MAP.NPC.RESCUE_TURNS_MIN;
+      npcTile.rescueProgress = rescueTurns;
+      npcTile.maxRescueProgress = rescueTurns;
+
+      // Remove from available
+      availableTiles = availableTiles.filter(t => t !== npcTile);
     }
-
-    // Calculate distance from train (Manhattan distance: sum of x and y offsets)
-    const xDist = Math.abs(t.x - centerX);
-    const yDist = Math.abs(t.y - centerY);
-    const manhattanDistance = xDist + yDist;
-
-    return manhattanDistance >= minDistance;
-  });
-
-  if (potentialNPCTiles.length > 0) {
-    // Pick a random tile to become an NPC
-    const npcTile = potentialNPCTiles[Math.floor(Math.random() * potentialNPCTiles.length)];
-
-    // Convert to NPC
-    npcTile.type = 'npc';
-
-    // Assign random buff
-    const buffs: ('stamina' | 'health' | 'attack')[] = ['stamina', 'health', 'attack'];
-    npcTile.npcBuff = buffs[Math.floor(Math.random() * buffs.length)];
-
-    // Assign rescue turns
-    const rescueTurns = Math.floor(Math.random() * GAME_CONFIG.MAP.NPC.RESCUE_TURNS_VAR) + GAME_CONFIG.MAP.NPC.RESCUE_TURNS_MIN;
-    npcTile.rescueProgress = rescueTurns;
-    npcTile.maxRescueProgress = rescueTurns;
   }
 
-  // Run initial reveal logic
-  // 1. Reveal neighbors of the Train (Center) - REMOVED to respect "only up/down explorable"
-  // revealNeighbors(centerX, centerY, newGrid);
+  // 5. Generate Deck
+  const deckSize = availableTiles.length;
+  const { TREE_PCT, ROCK_PCT, ENEMY_PCT, MIN_TREES, MIN_ROCKS, MIN_ENEMIES } = GAME_CONFIG.MAP.DECK;
 
-  // 2. Reveal neighbors of the forced open tiles.
-  // This ensures we see the first layer of trees/rocks around our starting clearing.
-  // startAccessible.forEach(pos => {
-  //     revealNeighbors(pos.x, pos.y, newGrid);
-  // });
+  let treeCount = Math.floor(deckSize * TREE_PCT);
+  if (treeCount < MIN_TREES) treeCount = MIN_TREES;
 
-  // --- BROKEN TRACKS ---
+  let rockCount = Math.floor(deckSize * ROCK_PCT);
+  if (rockCount < MIN_ROCKS) rockCount = MIN_ROCKS;
+
+  let enemyCount = Math.floor(deckSize * ENEMY_PCT);
+  if (enemyCount < MIN_ENEMIES) enemyCount = MIN_ENEMIES;
+
+  const deck: string[] = [];
+  for (let i = 0; i < treeCount; i++) deck.push('tree');
+  for (let i = 0; i < rockCount; i++) deck.push('rock');
+  for (let i = 0; i < enemyCount; i++) deck.push('enemy');
+
+  // Fill remainder with 'search'
+  while (deck.length < deckSize) {
+    deck.push('search');
+  }
+
+  // If deck is too big (because minimums forced us over), trim to size
+  if (deck.length > deckSize) {
+    deck.length = deckSize;
+  }
+
+  // 6. Shuffle Deck
+  for (let i = deck.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [deck[i], deck[j]] = [deck[j], deck[i]];
+  }
+
+  // 7. Assign Deck to Tiles
+  availableTiles.forEach((tile, index) => {
+    const type = deck[index];
+    tile.type = type as any;
+
+    // Set properties based on type
+    if (type === 'tree') {
+      tile.scavengeLeft = Math.floor(Math.random() * GAME_CONFIG.MAP.LOOT.TREE_VAR) + GAME_CONFIG.MAP.LOOT.TREE_MIN;
+    } else if (type === 'rock') {
+      // Rocks don't have scavengeLeft usually
+    } else if (type === 'enemy') {
+      const level = calculateEnemyLevel(station, san);
+      tile.attack = Math.floor(Math.random() * GAME_CONFIG.MAP.ENEMIES.ATTACK_VAR) +
+        GAME_CONFIG.MAP.ENEMIES.ATTACK_MIN +
+        level;
+      const hp = Math.floor(Math.random() * GAME_CONFIG.MAP.ENEMIES.HP_VAR) +
+        GAME_CONFIG.MAP.ENEMIES.HP_MIN +
+        (level * 2);
+      tile.hp = hp;
+      tile.maxHp = hp;
+    } else if (type === 'search') {
+      tile.scavengeLeft = Math.floor(Math.random() * GAME_CONFIG.MAP.LOOT.SCAVENGE_VAR) + GAME_CONFIG.MAP.LOOT.SCAVENGE_MIN;
+    }
+
+    // Update maxExploration based on new type
+    const configKey = tile.type.toUpperCase() as keyof typeof GAME_CONFIG.EXPLORATION.CLICKS_REQUIRED;
+    tile.maxExploration = GAME_CONFIG.EXPLORATION.CLICKS_REQUIRED[configKey] ?? 1;
+  });
+
+  // 8. Broken Tracks
   const trackTiles = newGrid.filter(t => t.type === 'track');
   const brokenCount = Math.min(trackTiles.length, GAME_CONFIG.MAP.BROKEN_TRACKS.BASE + (station) * GAME_CONFIG.MAP.BROKEN_TRACKS.PER_SECTOR);
 
-  // Shuffle tracks to pick random ones
   for (let i = trackTiles.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [trackTiles[i], trackTiles[j]] = [trackTiles[j], trackTiles[i]];
   }
 
-  // Mark first N as broken
   for (let i = 0; i < brokenCount; i++) {
     trackTiles[i].isBroken = true;
   }
 
-  // Final pass to set peek status correctly based on the initial reveals
+  // 9. Final Peek Update
   updatePeekStatus(newGrid);
 
   return newGrid;

@@ -15,6 +15,7 @@ interface StatusFooterProps {
     onRest: () => void;
     logs?: LogEntry[];
     onLogClick?: () => void;
+    onAvatarClick?: () => void;
 }
 
 export const StatusFooter: React.FC<StatusFooterProps> = ({
@@ -29,7 +30,8 @@ export const StatusFooter: React.FC<StatusFooterProps> = ({
     onRest,
     isExhausted,
     logs,
-    onLogClick
+    onLogClick,
+    onAvatarClick
 }) => {
     // Get the last log entry
     const lastLog = logs && logs.length > 0 ? logs[0] : null;
@@ -37,8 +39,11 @@ export const StatusFooter: React.FC<StatusFooterProps> = ({
     return (
         <div className="bg-stone-900 border-t border-stone-800 p-4 flex items-center justify-between gap-4 shrink-0 shadow-[0_-10px_20px_rgba(0,0,0,0.5)] z-10">
             <div className="flex gap-6 items-center">
-                <div className="flex flex-col items-center justify-center -mt-2">
-                    <div className="text-5xl filter drop-shadow-lg transition-transform hover:scale-110 cursor-default">{avatar}</div>
+                <div
+                    className="flex flex-col items-center justify-center -mt-2 cursor-pointer active:scale-95 transition-transform"
+                    onClick={onAvatarClick}
+                >
+                    <div className="text-5xl filter drop-shadow-lg transition-transform hover:scale-110">{avatar}</div>
                 </div>
 
                 <div className="flex flex-col gap-3 w-40 sm:w-56">

@@ -21,12 +21,16 @@ import { Header } from './components/Header';
 import { StatusFooter } from './components/StatusFooter';
 import { WorkshopModal } from './components/WorkshopModal';
 import { LogModal } from './components/LogModal';
+import { CargoModal } from './components/CargoModal';
+import { LocomotiveModal } from './components/LocomotiveModal';
 import { InventoryBar } from './components/InventoryBar';
 
 // Utilities
 import { generateLevel, revealNeighbors, updatePeekStatus } from './utils/map';
 import { getAvatarFace, calculateRestOutcome, calculateEnemyLevel } from './utils/gameplay';
 import { canClickTile, validateAndCalculateCost, findToolIndex, calculateTileCost, TileActionContext } from './utils/tileActions';
+import { processExplorationReveal, processCombat, processInteraction, processItemConsumption } from './utils/interactionLogic';
+import { addToInventory, removeFromInventory, consumeResources, decreaseToolDurability, consumeFromCombinedInventory } from './utils/inventory';
 
 export default function App() {
   // --- Global State ---
@@ -38,6 +42,7 @@ export default function App() {
 
   // Inventory State
   const [inventory, setInventory] = useState<Inventory>(Array(INVENTORY_SIZE).fill(null));
+  const [cargoStorage, setCargoStorage] = useState<Inventory>(Array(INVENTORY_SIZE).fill(null));
 
   const [carriageLevel, setCarriageLevel] = useState(0);
 
@@ -70,6 +75,8 @@ export default function App() {
   const [diceRolls, setDiceRolls] = useState<number[]>([]);
   const [showWorkshopModal, setShowWorkshopModal] = useState(false);
   const [showLogModal, setShowLogModal] = useState(false);
+  const [showCargoModal, setShowCargoModal] = useState(false);
+  const [showLocomotiveModal, setShowLocomotiveModal] = useState(false);
 
   // Computed Properties
   const currentLoad = inventory.reduce((acc, item) => acc + (item ? item.count : 0), 0);
@@ -92,88 +99,7 @@ export default function App() {
   const [selectedSlot, setSelectedSlot] = useState<number | undefined>(undefined);
 
   // Inventory Helpers (Refactored to be pure-ish)
-  const addToInventory = (currentInv: Inventory, type: ItemType, count: number, durability?: number): { newInv: Inventory, added: number } => {
-    let remaining = count;
-    const newInv = [...currentInv];
-    const maxStack = ITEM_CONFIG[type].maxStack;
-
-    // 1. Fill existing slots
-    for (let i = 0; i < newInv.length; i++) {
-      if (remaining <= 0) break;
-      const item = newInv[i];
-      if (item && item.type === type && item.count < maxStack) {
-        const space = maxStack - item.count;
-        const add = Math.min(remaining, space);
-        newInv[i] = { ...item, count: item.count + add };
-        remaining -= add;
-      }
-    }
-
-    // 2. Fill empty slots
-    for (let i = 0; i < newInv.length; i++) {
-      if (remaining <= 0) break;
-      if (newInv[i] === null) {
-        const add = Math.min(remaining, maxStack);
-        newInv[i] = {
-          id: Math.random().toString(36).substr(2, 9),
-          type,
-          count: add,
-          durability: durability,
-          maxDurability: durability ? MAX_TOOL_DURABILITY : undefined
-        };
-        remaining -= add;
-      }
-    }
-
-    return { newInv, added: count - remaining };
-  };
-
-  const removeFromInventory = (currentInv: Inventory, type: ItemType, count: number): { newInv: Inventory, success: boolean } => {
-    // Check if we have enough first
-    const total = currentInv.reduce((acc, item) => (item?.type === type ? acc + item.count : acc), 0);
-    if (total < count) return { newInv: currentInv, success: false };
-
-    let remaining = count;
-    const newInv = [...currentInv];
-
-    // Remove from last slots first (optional preference)
-    for (let i = newInv.length - 1; i >= 0; i--) {
-      if (remaining <= 0) break;
-      const item = newInv[i];
-      if (item && item.type === type) {
-        if (item.count > remaining) {
-          newInv[i] = { ...item, count: item.count - remaining };
-          remaining = 0;
-        } else {
-          remaining -= item.count;
-          newInv[i] = null;
-        }
-      }
-    }
-
-    return { newInv, success: true };
-  };
-
-  const findTool = (type: ItemType) => {
-    return inventory.find(item => item?.type === type && (item.durability === undefined || item.durability > 0));
-  };
-
-  const decreaseToolDurability = (currentInv: Inventory, slotIndex: number): Inventory => {
-    const newInv = [...currentInv];
-    const item = newInv[slotIndex];
-
-    if (item && item.durability !== undefined) {
-      const newDurability = item.durability - 1;
-      if (newDurability <= 0) {
-        newInv[slotIndex] = null;
-        addLog(`Your ${item.type} broke!`, 'error');
-        if (selectedSlot === slotIndex) setSelectedSlot(undefined);
-      } else {
-        newInv[slotIndex] = { ...item, durability: newDurability };
-      }
-    }
-    return newInv;
-  };
+  // Removed local implementations, using imported ones from utils/inventory.ts
 
   // Check Game Over
   useEffect(() => {
@@ -238,35 +164,29 @@ export default function App() {
       setEnergy(prev => prev - cost);
 
       const newGrid = [...grid];
-      const targetTile = newGrid.find(t => t.id === tile.id);
-      if (!targetTile) return;
+      const targetTileIndex = newGrid.findIndex(t => t.id === tile.id);
+      if (targetTileIndex === -1) return;
 
+      const targetTile = { ...newGrid[targetTileIndex] };
       targetTile.explorationProgress = (targetTile.explorationProgress || 0) + 1;
 
       if (targetTile.explorationProgress >= (targetTile.maxExploration || 1)) {
         // Reveal!
-        targetTile.revealed = true;
-        targetTile.effect = 'pop';
+        const { updatedTile, loot, logs: newLogs } = processExplorationReveal(targetTile, newGrid);
+        newGrid[targetTileIndex] = updatedTile;
 
-        // Handle Discovery Rewards
-        const rewardConfig = GAME_CONFIG.EXPLORATION.REWARD[targetTile.type.toUpperCase() as keyof typeof GAME_CONFIG.EXPLORATION.REWARD];
-        if (rewardConfig) {
-          const res = addToInventory(inventory, rewardConfig.type, rewardConfig.count);
+        newLogs.forEach(log => addLog(log.text, log.type));
+
+        loot.forEach(item => {
+          const res = addToInventory(inventory, item.type, item.count);
           setInventory(res.newInv);
-          addLog(`Explored and found ${rewardConfig.count} ${rewardConfig.type}!`, 'success');
-
-          if (rewardConfig.type === 'wood') setGameStats(prev => ({ ...prev, totalWood: prev.totalWood + rewardConfig.count }));
-          if (rewardConfig.type === 'stone') setGameStats(prev => ({ ...prev, totalStone: prev.totalStone + rewardConfig.count }));
-        } else {
-          addLog("Area explored.", 'neutral');
-        }
+          if (item.type === 'wood') setGameStats(prev => ({ ...prev, totalWood: prev.totalWood + item.count }));
+          if (item.type === 'stone') setGameStats(prev => ({ ...prev, totalStone: prev.totalStone + item.count }));
+        });
 
         // If the revealed tile is transparent (like Search/Empty), it might reveal neighbors
-        // We can use the utility isLightSource if we export it, or just check types
-        // Search tiles are transparent.
-        if (targetTile.type === 'search') {
-          targetTile.cleared = true;
-          const newlyRevealed = revealNeighbors(targetTile.x, targetTile.y, newGrid);
+        if (updatedTile.type === 'search') {
+          const newlyRevealed = revealNeighbors(updatedTile.x, updatedTile.y, newGrid);
           // Handle ambush for newly revealed enemies from this chain reaction
           let ambushDmg = 0;
           newlyRevealed.forEach(t => {
@@ -279,10 +199,54 @@ export default function App() {
           if (ambushDmg > 0) setHp(prev => prev - ambushDmg);
         }
       } else {
+        newGrid[targetTileIndex] = targetTile;
         addLog("Exploring...", 'neutral');
       }
       updatePeekStatus(newGrid);
       setGrid(newGrid);
+      return;
+    }
+
+    // Train Carriages Interaction
+    if (tile.type === 'locomotive') {
+      if (selectedSlot !== undefined) {
+        const item = inventory[selectedSlot];
+        if (item && (item.type === 'wood' || item.type === 'charcoal')) {
+          addFuel(item.type);
+          if (item.count <= 1) setSelectedSlot(undefined);
+          return;
+        }
+      }
+      // Open modal if no fuel selected (or even if other items selected, though logic above handles fuel)
+      setShowLocomotiveModal(true);
+      return;
+    }
+
+    if (tile.type === 'workshop_carriage') {
+      setShowWorkshopModal(true);
+      return;
+    }
+
+    if (tile.type === 'cargo_carriage') {
+      if (selectedSlot !== undefined) {
+        const item = inventory[selectedSlot];
+        if (item) {
+          const res = addToInventory(cargoStorage, item.type, item.count, item.durability);
+          setCargoStorage(res.newInv);
+
+          const addedCount = res.added;
+          if (addedCount > 0) {
+            const removeRes = removeFromInventory(inventory, item.type, addedCount);
+            setInventory(removeRes.newInv);
+            if (removeRes.newInv[selectedSlot] === null) setSelectedSlot(undefined);
+            addLog(`Stored ${addedCount} ${item.type}`, "success");
+          } else {
+            addLog("Cargo full!", "error");
+          }
+        }
+      } else {
+        setShowCargoModal(true);
+      }
       return;
     }
 
@@ -291,13 +255,23 @@ export default function App() {
       const woodCost = GAME_CONFIG.MAP.BROKEN_TRACKS.REPAIR_COST_WOOD;
       const stoneCost = GAME_CONFIG.MAP.BROKEN_TRACKS.REPAIR_COST_STONE;
 
-      setEnergy(prev => prev - cost);
+      // Define cost as requirements
+      const requirements: { type: ItemType; count: number }[] = [
+        { type: 'wood', count: woodCost },
+        { type: 'stone', count: stoneCost }
+      ];
 
-      // Deduct resources
-      let tempInv = [...inventory];
-      tempInv = removeFromInventory(tempInv, 'wood', woodCost).newInv;
-      tempInv = removeFromInventory(tempInv, 'stone', stoneCost).newInv;
-      setInventory(tempInv);
+      // Use consumeResources helper
+      const { newInv, success } = consumeResources(inventory, requirements);
+
+      if (!success) {
+        // Should be caught by validator, but double check
+        addLog("Insufficient resources to repair!", "error");
+        return;
+      }
+
+      setEnergy(prev => prev - cost);
+      setInventory(newInv);
 
       // Fix track
       setGrid(prev => prev.map(t => t.id === tile.id ? { ...t, isBroken: false, effect: 'pop' } : t));
@@ -308,21 +282,7 @@ export default function App() {
     // Check Tool (for non-combat interactions)
     const config = TILE_TYPES[tile.type.toUpperCase()];
     if (config.tool && tile.type !== 'enemy') {
-      const selectedItem = selectedSlot !== undefined ? inventory[selectedSlot] : null;
-      // If a specific tool is required, check if it's selected OR if we have it (auto-select logic could go here, but let's stick to manual or auto-find)
-      // For now, let's keep the auto-find logic for tools like Axe/Pickaxe for QoL, but prioritize selected.
-
-      // Actually, let's enforce selection for everything if we want consistency?
-      // The prompt only specified "click on bow to toggle active".
-      // Let's keep auto-find for Axe/Pickaxe for QoL, but prioritize selected.
-
-      let toolIndex = -1;
-      if (selectedItem && selectedItem.type === config.tool) {
-        toolIndex = selectedSlot!;
-      } else {
-        toolIndex = inventory.findIndex(item => item?.type === config.tool && (item.durability === undefined || item.durability > 0));
-      }
-
+      const toolIndex = findToolIndex(inventory, config.tool, selectedSlot);
       if (toolIndex === -1) {
         addLog(`Requires ${config.tool}!`, "error");
         return;
@@ -337,134 +297,64 @@ export default function App() {
 
     setEnergy(prev => prev - cost);
 
-    // Visual Effect
-    setGrid(prev => prev.map(t => t.id === tile.id ? { ...t, effect: 'pop' } : t));
-    setTimeout(() => {
-      setGrid(prev => prev.map(t => t.id === tile.id ? { ...t, effect: null } : t));
-    }, 400);
-
     let tempInv = [...inventory];
     const newGrid = [...grid];
-    const targetTile = newGrid.find(t => t.id === tile.id);
-    if (!targetTile) return;
+    const targetTileIndex = newGrid.findIndex(t => t.id === tile.id);
+    if (targetTileIndex === -1) return;
+    const targetTile = { ...newGrid[targetTileIndex] };
 
-    let dropMsg = "";
     let loot: { type: ItemType, count: number }[] = [];
+    let dropMsg = "";
 
     if (tile.type === 'enemy') {
-      // Combat Logic
-      const selectedItem = selectedSlot !== undefined ? tempInv[selectedSlot] : null;
-      const isUsingBow = selectedItem?.type === 'bow';
+      const { updatedTile, hpChange, goldChange, loot: combatLoot, logs: combatLogs, statsUpdate, toolDurabilityIndex } = processCombat(
+        targetTile,
+        tempInv,
+        selectedSlot,
+        selectedSlot !== undefined && tempInv[selectedSlot]?.type === 'bow' ? GAME_CONFIG.ACTIONS.BOW_DMG : buffedAttack,
+        station,
+        gameStats.san
+      );
 
-      const playerDmg = isUsingBow ? GAME_CONFIG.ACTIONS.BOW_DMG : buffedAttack;
-      const enemyDmg = targetTile.attack;
+      newGrid[targetTileIndex] = updatedTile;
+      if (hpChange !== 0) setHp(prev => prev + hpChange);
+      if (goldChange !== 0) setGold(prev => prev + goldChange);
+      if (statsUpdate.enemiesDefeated) setGameStats(prev => ({ ...prev, enemiesDefeated: prev.enemiesDefeated + statsUpdate.enemiesDefeated! }));
 
-      // Apply Damage to Enemy
-      targetTile.hp = (targetTile.hp || 0) - playerDmg;
+      combatLogs.forEach(log => addLog(log.text, log.type));
+      loot = combatLoot;
 
-      // Check if Enemy Defeated
-      if ((targetTile.hp || 0) <= 0) {
-        // Enemy Died
-        targetTile.cleared = true;
-        targetTile.type = 'search';
-        dropMsg = `Enemy Defeated!`;
-        setGameStats(prev => ({ ...prev, enemiesDefeated: prev.enemiesDefeated + 1 }));
-
-        // Loot
-        // Loot
-        const woodAmt = Math.floor(Math.random() * GAME_CONFIG.MAP.ENEMIES.LOOT_WOOD_VAR) + GAME_CONFIG.MAP.ENEMIES.LOOT_WOOD_MIN;
-        const stoneAmt = Math.floor(Math.random() * GAME_CONFIG.MAP.ENEMIES.LOOT_STONE_VAR) + GAME_CONFIG.MAP.ENEMIES.LOOT_STONE_MIN;
-        if (woodAmt > 0) loot.push({ type: 'wood', count: woodAmt });
-        if (stoneAmt > 0) loot.push({ type: 'stone', count: stoneAmt });
-
-        // Gold
-        const goldAmt = Math.floor(Math.random() * GAME_CONFIG.MAP.ENEMIES.LOOT_GOLD_VAR) + GAME_CONFIG.MAP.ENEMIES.LOOT_GOLD_MIN;
-        if (goldAmt > 0) {
-          setGold(prev => prev + goldAmt);
-          dropMsg += ` (+${goldAmt} G)`;
-        }
-
-        // Key
-        const level = calculateEnemyLevel(station, gameStats.san);
-        const keyChance = GAME_CONFIG.MAP.ENEMIES.LOOT_KEY_CHANCE_BASE + (level * GAME_CONFIG.MAP.ENEMIES.LOOT_KEY_CHANCE_LEVEL_MULT);
-        if (Math.random() < keyChance) {
-          loot.push({ type: 'key', count: 1 });
-          dropMsg += ` (Found Key!)`;
-        }
-
-        // Player Damage Check
-        if (isUsingBow) {
-          addLog("Sniper Shot! Took no damage.", "success");
-          // Bow Durability
-          tempInv = decreaseToolDurability(tempInv, selectedSlot!);
-        } else {
-          setHp(prev => prev - enemyDmg);
-          addLog(`Took ${enemyDmg} damage!`, "warning");
-        }
-
-      } else {
-        // Enemy Survived
-        setHp(prev => prev - enemyDmg);
-        addLog(`Hit enemy for ${playerDmg}. Took ${enemyDmg} damage!`, "warning");
-        if (isUsingBow) {
-          tempInv = decreaseToolDurability(tempInv, selectedSlot!);
+      if (toolDurabilityIndex !== undefined) {
+        const res = decreaseToolDurability(tempInv, toolDurabilityIndex);
+        tempInv = res.newInv;
+        if (res.broken) {
+          addLog(`Your ${res.itemType} broke!`, 'error');
+          setSelectedSlot(undefined);
         }
       }
 
     } else {
       // Non-Combat Logic
-      // const config = TILE_TYPES[tile.type.toUpperCase()]; // Already defined above
       if (config.tool) {
-        // Find tool index using utility function
         const toolIndex = findToolIndex(tempInv, config.tool, selectedSlot);
-
         if (toolIndex !== -1) {
-          tempInv = decreaseToolDurability(tempInv, toolIndex);
+          const res = decreaseToolDurability(tempInv, toolIndex);
+          tempInv = res.newInv;
+          if (res.broken) {
+            addLog(`Your ${res.itemType} broke!`, 'error');
+            if (selectedSlot === toolIndex) setSelectedSlot(undefined);
+          }
         }
       }
 
-      // if (tile.type === 'search') {
-      //   targetTile.cleared = true;
-      // }
-      if (tile.type === 'tree') {
-        const amount = Math.floor(Math.random() * GAME_CONFIG.MAP.LOOT.TREE_VAR) + GAME_CONFIG.MAP.LOOT.TREE_MIN;
-        loot.push({ type: 'wood', count: amount });
-        targetTile.scavengeLeft = (targetTile.scavengeLeft || 0) - 1;
-        targetTile.searchCount = (targetTile.searchCount || 0) + 1;
-        dropMsg = `Logging (+${amount} Wood)`;
-        if (targetTile.scavengeLeft <= 0) {
-          targetTile.cleared = true;
-          targetTile.type = 'search';
-        }
-      } else if (tile.type === 'rock') {
-        const amount = Math.floor(Math.random() * GAME_CONFIG.MAP.LOOT.ROCK_VAR) + GAME_CONFIG.MAP.LOOT.ROCK_MIN;
-        loot.push({ type: 'stone', count: amount });
-        dropMsg = `Mining (+${amount} Stone)`;
-        targetTile.cleared = true;
-        targetTile.type = 'search';
-      } else if (tile.type === 'npc') {
-        // NPC Rescue Logic
-        targetTile.rescueProgress = (targetTile.rescueProgress || 0) - 1;
+      const { updatedTile, loot: interactLoot, logs: interactLogs, rescuedNPC } = processInteraction(targetTile, tempInv, selectedSlot);
 
-        if (targetTile.rescueProgress <= 0) {
-          // Rescue Complete!
-          targetTile.cleared = true;
-          targetTile.type = 'search';
+      newGrid[targetTileIndex] = updatedTile;
+      interactLogs.forEach(log => addLog(log.text, log.type));
+      loot = interactLoot;
 
-          const buff = targetTile.npcBuff || 'stamina';
-          setRescuedNPCs(prev => [...prev, { buff }]);
-
-          const buffNames = {
-            'stamina': 'Max Stamina',
-            'health': 'Max HP',
-            'attack': 'Attack Power'
-          };
-
-          dropMsg = `NPC Rescued! Gained ${buffNames[buff]} buff!`;
-          addLog(dropMsg, 'success');
-        } else {
-          dropMsg = `Rescuing... ${targetTile.rescueProgress} turns left`;
-        }
+      if (rescuedNPC) {
+        setRescuedNPCs(prev => [...prev, rescuedNPC!]);
       }
     }
 
@@ -486,12 +376,11 @@ export default function App() {
 
     setInventory(tempInv);
 
-    if (dropMsg) addLog(dropMsg, tile.type === 'enemy' ? 'warning' : 'success');
-
     // Reveal logic via Utility
+    const updatedTarget = newGrid[targetTileIndex];
     let newlyRevealed: TileType[] = [];
-    if (targetTile.cleared || targetTile.type === 'search' || tile.type === 'tree' || tile.type === 'rock') {
-      newlyRevealed = revealNeighbors(targetTile.x, targetTile.y, newGrid);
+    if (updatedTarget.cleared || updatedTarget.type === 'search' || tile.type === 'tree' || tile.type === 'rock') {
+      newlyRevealed = revealNeighbors(updatedTarget.x, updatedTarget.y, newGrid);
     }
 
     let ambushDmg = 0;
@@ -508,6 +397,31 @@ export default function App() {
     }
 
     setGrid(newGrid);
+  };
+
+  const handleAvatarClick = () => {
+    if (selectedSlot === undefined) return;
+    const item = inventory[selectedSlot];
+
+    const { success, hpChange, energyChange, logs: consumptionLogs } = processItemConsumption(
+      item, hp, buffedMaxHp, energy, buffedMaxEnergy
+    );
+
+    consumptionLogs.forEach(log => addLog(log.text, log.type));
+
+    if (success && item) {
+      const res = removeFromInventory(inventory, item.type, 1);
+      if (res.success) {
+        setInventory(res.newInv);
+        setHp(prev => Math.min(prev + (GAME_CONFIG.ITEMS.BERRY.HEAL), buffedMaxHp));
+        setEnergy(prev => Math.min(prev + energyChange, buffedMaxEnergy));
+
+        // If run out, deselect
+        if (item.count <= 1) {
+          setSelectedSlot(undefined);
+        }
+      }
+    }
   };
 
   const handleRest = () => {
@@ -586,24 +500,19 @@ export default function App() {
       return;
     }
 
-    // Check Resources
-    const canCraft = recipe.input.every(req => {
-      const count = inventory.reduce((acc, item) => (item?.type === req.type ? acc + item.count : acc), 0);
-      return count >= req.count;
-    });
+    // Check Resources and Consume (from Inventory + Cargo)
+    const { newPrimary, newSecondary, success } = consumeFromCombinedInventory(inventory, cargoStorage, recipe.input);
 
-    if (!canCraft) {
-      addLog("Insufficient resources", "error");
+    if (!success) {
+      addLog("Insufficient resources (checked Inventory & Cargo)", "error");
       return;
     }
 
-    let tempInv = [...inventory];
+    let tempInv = newPrimary;
+    const tempCargo = newSecondary;
 
-    // Consume Resources
-    recipe.input.forEach(req => {
-      const res = removeFromInventory(tempInv, req.type, req.count);
-      if (res.success) tempInv = res.newInv;
-    });
+    // Update Cargo
+    setCargoStorage(tempCargo);
 
     // Consume Energy
     if (staminaCost > 0) {
@@ -889,9 +798,26 @@ export default function App() {
             isExhausted={isExhausted}
             logs={logs}
             onLogClick={() => setShowLogModal(true)}
+            onAvatarClick={handleAvatarClick}
           />
         </section>
       </main>
+
+      {/* Locomotive Modal */}
+      {showLocomotiveModal && (
+        <LocomotiveModal
+          pressure={pressure}
+          targetPressure={targetPressure}
+          inventory={inventory}
+          viewState={viewState}
+          onAddFuel={addFuel}
+          onDepart={() => {
+            depart();
+            setShowLocomotiveModal(false);
+          }}
+          onClose={() => setShowLocomotiveModal(false)}
+        />
+      )}
 
       {/* Enemy Spawn Animation (Dice) */}
       {showEnemySpawnAnimation && (
@@ -920,6 +846,30 @@ export default function App() {
         <LogModal
           logs={logs}
           onClose={() => setShowLogModal(false)}
+        />
+      )}
+
+      {/* Cargo Modal */}
+      {showCargoModal && (
+        <CargoModal
+          cargo={cargoStorage}
+          onRetrieve={(index) => {
+            const item = cargoStorage[index];
+            if (item) {
+              const res = addToInventory(inventory, item.type, item.count, item.durability);
+              setInventory(res.newInv);
+              const added = res.added;
+              if (added > 0) {
+                // Remove from cargo
+                const removeRes = removeFromInventory(cargoStorage, item.type, added);
+                setCargoStorage(removeRes.newInv);
+                addLog(`Retrieved ${added} ${item.type}`, "success");
+              } else {
+                addLog("Inventory full!", "error");
+              }
+            }
+          }}
+          onClose={() => setShowCargoModal(false)}
         />
       )}
 

@@ -23,8 +23,14 @@ export const WorkshopModal: React.FC<WorkshopModalProps> = ({
     const findTool = (type: string) => inventory.find(item => item?.type === type);
 
     return (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-6 animate-in fade-in duration-200">
-            <div className="max-w-2xl w-full bg-stone-900 border-2 border-stone-800 rounded-2xl shadow-2xl overflow-hidden max-h-[80vh] flex flex-col">
+        <div
+            className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-6 animate-in fade-in duration-200"
+            onClick={onClose}
+        >
+            <div
+                className="max-w-2xl w-full bg-stone-900 border-2 border-stone-800 rounded-2xl shadow-2xl overflow-hidden max-h-[80vh] flex flex-col"
+                onClick={(e) => e.stopPropagation()}
+            >
                 {/* Header */}
                 <div className="flex items-center justify-between p-5 border-b border-stone-800 bg-stone-950">
                     <div className="flex items-center gap-2">

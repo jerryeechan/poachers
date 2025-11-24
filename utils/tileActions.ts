@@ -1,5 +1,6 @@
 import { Tile as TileType, Inventory, ItemType, ViewState, WeatherType } from '../types';
 import { TILE_TYPES, GAME_CONFIG } from '../constants';
+import { hasResources } from './inventory';
 
 // ============================================================================
 // Types & Interfaces
@@ -56,11 +57,18 @@ const npcCostCalculator: CostCalculator = () => {
     return GAME_CONFIG.ACTIONS.COST_BASE;
 };
 
+const zeroCostCalculator: CostCalculator = () => {
+    return 0;
+};
+
 const COST_CALCULATORS: Record<string, CostCalculator> = {
     search: searchCostCalculator,
     tree: treeCostCalculator,
     enemy: enemyCostCalculator,
     npc: npcCostCalculator,
+    locomotive: zeroCostCalculator,
+    workshop_carriage: zeroCostCalculator,
+    cargo_carriage: zeroCostCalculator,
 };
 
 /**
@@ -115,12 +123,12 @@ const brokenTrackValidator: TileValidator = (context) => {
     const woodCost = GAME_CONFIG.MAP.BROKEN_TRACKS.REPAIR_COST_WOOD;
     const stoneCost = GAME_CONFIG.MAP.BROKEN_TRACKS.REPAIR_COST_STONE;
 
-    const woodItem = inventory.find(i => i?.type === 'wood');
-    const stoneItem = inventory.find(i => i?.type === 'stone');
-    const woodCount = woodItem ? woodItem.count : 0;
-    const stoneCount = stoneItem ? stoneItem.count : 0;
+    const requirements: { type: ItemType; count: number }[] = [
+        { type: 'wood', count: woodCost },
+        { type: 'stone', count: stoneCost }
+    ];
 
-    if (woodCount < woodCost || stoneCount < stoneCost) {
+    if (!hasResources(inventory, requirements)) {
         return {
             isValid: false,
             errorMessage: `Need ${woodCost} Wood and ${stoneCost} Stone to repair!`
@@ -233,8 +241,9 @@ export function canClickTile(tile: TileType, viewState: ViewState): boolean {
 
         const isScavengeableTree = tile.type === 'tree' && tile.scavengeLeft > 0;
         const isBrokenTrack = tile.type === 'track' && tile.isBroken;
+        const isCarriage = tile.type === 'locomotive' || tile.type === 'workshop_carriage' || tile.type === 'cargo_carriage';
 
-        if (!isScavengeableTree && !isBrokenTrack) {
+        if (!isScavengeableTree && !isBrokenTrack && !isCarriage) {
             console.log("Cleared tile clicked");
             return false;
         }

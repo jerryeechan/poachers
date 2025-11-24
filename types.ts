@@ -2,7 +2,7 @@ import { LucideIcon } from 'lucide-react';
 
 export type ResourceType = 'wood' | 'stone' | 'charcoal';
 export type ToolType = 'axe' | 'pickaxe' | 'bow';
-export type TileTypeStr = 'void' | 'track' | 'search' | 'train' | 'tree' | 'rock' | 'enemy' | 'npc';
+export type TileTypeStr = 'void' | 'track' | 'search' | 'train' | 'tree' | 'rock' | 'enemy' | 'npc' | 'locomotive' | 'workshop_carriage' | 'cargo_carriage';
 export type WeatherType = 'sunny' | 'rain' | 'windy';
 export type ViewState = 'map' | 'shop' | 'gameover';
 
@@ -14,7 +14,7 @@ export interface Item {
   maxDurability?: number;
 }
 
-export type ItemType = 'wood' | 'stone' | 'charcoal' | 'axe' | 'pickaxe' | 'bow' | 'key';
+export type ItemType = 'wood' | 'stone' | 'charcoal' | 'axe' | 'pickaxe' | 'bow' | 'key' | 'berry';
 
 export type Inventory = (Item | null)[];
 

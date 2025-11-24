@@ -71,10 +71,10 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
           <div className="flex items-center gap-2">
             {/* Train Capacity */}
-            <div className="flex items-center gap-1 text-blue-400 font-mono text-sm border border-blue-500/30 bg-blue-500/10 px-3 py-1 rounded-full">
+            {/* <div className="flex items-center gap-1 text-blue-400 font-mono text-sm border border-blue-500/30 bg-blue-500/10 px-3 py-1 rounded-full">
               <Users size={14} />
               <span className="font-bold">{rescuedNPCs.length}/{maxTrainCapacity}</span>
-            </div>
+            </div> */}
             <div className="flex items-center gap-1 text-yellow-400 font-mono text-sm border border-yellow-500/30 bg-yellow-500/10 px-3 py-1 rounded-full">
               <Coins size={14} />
               <span className="font-bold">{gold} G</span>
@@ -83,55 +83,17 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
 
         <div className="flex items-center gap-2 sm:gap-4">
-          {/* Fuel Controls */}
+          {/* Resource Counts (Fuel) */}
           <div className="flex gap-2 sm:gap-3 items-center">
             <div className="flex items-center gap-1 bg-stone-800 px-2 py-1 rounded-md border border-stone-700 group transition-colors hover:border-emerald-500/50">
               <Trees size={14} className="text-emerald-500" />
               <span className="font-mono text-sm min-w-[20px] text-center">{woodCount}</span>
-              <button onClick={() => onAddFuel('wood')} className="ml-1 hover:bg-stone-700 rounded p-1 text-stone-500 hover:text-orange-400 transition-colors" title={`Burn Wood (+${GAME_CONFIG.TRAIN.FUEL_GAIN_WOOD} PSI)`}>
-                <Flame size={12} />
-              </button>
             </div>
             <div className="flex items-center gap-1 bg-stone-800 px-2 py-1 rounded-md border border-stone-700 group transition-colors hover:border-orange-500/50">
               <Flame size={14} className="text-orange-500" />
               <span className="font-mono text-sm min-w-[20px] text-center">{charcoalCount}</span>
-              <button onClick={() => onAddFuel('charcoal')} className="ml-1 hover:bg-stone-700 rounded p-1 text-stone-500 hover:text-orange-400 transition-colors" title={`Burn Charcoal (+${GAME_CONFIG.TRAIN.FUEL_GAIN_CHARCOAL} PSI)`}>
-                <Flame size={12} />
-              </button>
             </div>
           </div>
-
-          {/* Pressure Gauge */}
-          <div className="flex-1 flex items-center gap-3 ml-2">
-            <span className="text-[10px] font-bold text-stone-500 hidden md:inline tracking-wider">BOILER PRESSURE</span>
-            <div className="flex-1 h-8 bg-stone-950 rounded-md border border-stone-700 relative overflow-hidden group">
-              {/* Tick marks */}
-              <div className="absolute inset-0 flex justify-between px-2">
-                {[...Array(5)].map((_, i) => <div key={i} className="h-full w-[1px] bg-stone-800/50 z-10" />)}
-              </div>
-              <div
-                className="h-full bg-gradient-to-r from-orange-900 via-orange-600 to-amber-500 transition-all duration-500 ease-out"
-                style={{ width: `${Math.min(100, (pressure / targetPressure) * 100)}%` }}
-              ></div>
-              <div className="absolute inset-0 flex items-center justify-center text-xs font-mono font-bold text-stone-300 mix-blend-difference z-20">
-                {pressure} / {targetPressure} PSI
-              </div>
-            </div>
-          </div>
-
-          <button
-            onClick={onDepart}
-            disabled={pressure < targetPressure || viewState === 'shop'}
-            className={`
-              px-4 py-2 rounded-md font-bold text-sm flex items-center gap-2 transition-all shadow-lg
-              ${pressure >= targetPressure && viewState !== 'shop'
-                ? 'bg-amber-500 text-stone-900 hover:bg-amber-400 hover:scale-105 animate-pulse'
-                : 'bg-stone-800 text-stone-600 cursor-not-allowed grayscale'}
-            `}
-          >
-            <Train size={18} />
-            <span className="hidden sm:inline">DEPART</span>
-          </button>
         </div>
       </div>
     </header>

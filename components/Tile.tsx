@@ -171,7 +171,14 @@ export const Tile: React.FC<TileProps> = ({ tile, inventory, weather, energy, re
     isPeeked || // Can always explore peeked tiles
     (isRevealed && (
       (tile.type === 'track' && tile.isBroken) ||
-      (tile.type !== 'track' && (!tile.cleared || ((tile.type === 'tree') && tile.scavengeLeft > 0) || (tile.type === 'npc' && !tile.cleared)))
+      (tile.type !== 'track' && (
+        !tile.cleared ||
+        tile.type === 'locomotive' ||
+        tile.type === 'workshop_carriage' ||
+        tile.type === 'cargo_carriage' ||
+        ((tile.type === 'tree') && tile.scavengeLeft > 0) ||
+        (tile.type === 'npc' && !tile.cleared)
+      ))
     ))
   );
 
@@ -253,19 +260,11 @@ export const Tile: React.FC<TileProps> = ({ tile, inventory, weather, energy, re
           })()}
 
           {/* Train NPC Count Badge */}
-          {tile.type === 'train' && rescuedNPCs > 0 && (
+          {tile.type === 'locomotive' && rescuedNPCs > 0 && (
             <div className="absolute -bottom-2 -right-2 bg-blue-950 text-blue-300 text-[10px] px-1.5 py-0.5 rounded-full font-bold border border-blue-700 z-20 shadow-sm font-mono">
               {rescuedNPCs}
             </div>
           )}
-
-          {/* Blocked Overlay */}
-          {isBlocked && (
-            <div className="absolute inset-0 z-30 bg-black/40 flex items-center justify-center rounded-xl backdrop-blur-[1px]">
-              <Ban className="text-red-500/80 drop-shadow-md" size={24} />
-            </div>
-          )}
-
           {/* Common Badges */}
           <BadgesOverlay
             tile={tile}
@@ -275,6 +274,13 @@ export const Tile: React.FC<TileProps> = ({ tile, inventory, weather, energy, re
             hasTool={hasTool}
           />
         </>
+      )}
+
+      {/* Blocked Overlay */}
+      {isBlocked && (
+        <div className="absolute inset-0 z-30 bg-black/40 flex items-center justify-center rounded-xl backdrop-blur-[1px]">
+          <Ban className="text-red-500/80 drop-shadow-md" size={24} />
+        </div>
       )}
     </button>
   );

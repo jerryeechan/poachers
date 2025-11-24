@@ -1,6 +1,6 @@
 import {
   Train, Trees, MoreHorizontal, Mountain, Skull, Search,
-  Axe, Pickaxe, Crosshair, Flame, Box, Gem, User, Key
+  Axe, Pickaxe, Crosshair, Flame, Box, Gem, User, Key, Grape, Hammer
 } from 'lucide-react';
 import { Recipe, TileConfig, TileTypeStr, ItemType } from './types';
 
@@ -20,6 +20,7 @@ export const ITEM_CONFIG: Record<ItemType, { name: string; icon: any; maxStack: 
   pickaxe: { name: 'Pickaxe', icon: Pickaxe, maxStack: 1, desc: 'For mining rocks' },
   bow: { name: 'Bow', icon: Crosshair, maxStack: 1, desc: 'For hunting enemies' },
   key: { name: 'Key', icon: Key, maxStack: 10, desc: 'Opens locked chests' },
+  berry: { name: 'Wild Berry', icon: Grape, maxStack: 16, desc: 'Restores 1 HP & 3 Energy' },
 };
 
 export const GAME_CONFIG = {
@@ -53,6 +54,9 @@ export const GAME_CONFIG = {
       TRACK: 1,
       NPC: 1,
       TRAIN: 0, // Should be visible immediately usually
+      LOCOMOTIVE: 0,
+      WORKSHOP_CARRIAGE: 0,
+      CARGO_CARRIAGE: 0,
       VOID: 0,
     },
     REWARD: {
@@ -84,6 +88,8 @@ export const GAME_CONFIG = {
       SCAVENGE_VAR: 3, SCAVENGE_MIN: 1,
       EMPTY_CHANCE_WOOD: 0.45,
       EMPTY_CHANCE_STONE_THRESHOLD: 0.80,
+      BERRY_CHANCE: 1,
+      BERRY_MIN: 1, BERRY_VAR: 2,
     },
     ENEMIES: {
       ATTACK_MIN: 1, ATTACK_VAR: 2,
@@ -104,6 +110,15 @@ export const GAME_CONFIG = {
       PER_SECTOR: 1,
       REPAIR_COST_WOOD: 3,
       REPAIR_COST_STONE: 3,
+    },
+    DECK: {
+      TREE_PCT: 0.30,
+      ROCK_PCT: 0.30,
+      ENEMY_PCT: 0.15,
+      MIN_TREES: 5,
+      MIN_ROCKS: 5,
+      MIN_ENEMIES: 3,
+      MIN_NPCS: 1,
     }
   },
   REST: {
@@ -129,6 +144,12 @@ export const GAME_CONFIG = {
     PER_CRAFT: 50,
     PER_STATION: 500,
     PER_GOLD: 1,
+  },
+  ITEMS: {
+    BERRY: {
+      HEAL: 1,
+      ENERGY: 3,
+    }
   }
 };
 
@@ -168,6 +189,9 @@ export const TILE_TYPES: Record<string, TileConfig> = {
   ROCK: { id: 'rock', icon: Mountain, color: 'bg-slate-700 text-slate-300 border-slate-600 hover:border-slate-400', tool: 'pickaxe' },
   ENEMY: { id: 'enemy', icon: Skull, color: 'bg-red-950 text-red-400 border-red-900 hover:border-red-500', tool: 'bow' },
   NPC: { id: 'npc', icon: User, color: 'bg-blue-900 text-blue-300 border-blue-800 hover:border-blue-500' },
+  LOCOMOTIVE: { id: 'locomotive', icon: Train, color: 'bg-amber-600 text-stone-900 shadow-[0_0_15px_rgba(245,158,11,0.4)] ring-2 ring-amber-500/50' },
+  WORKSHOP_CARRIAGE: { id: 'workshop_carriage', icon: Hammer, color: 'bg-amber-700 text-stone-900 shadow-[0_0_10px_rgba(245,158,11,0.3)] ring-1 ring-amber-500/50' },
+  CARGO_CARRIAGE: { id: 'cargo_carriage', icon: Box, color: 'bg-amber-800 text-stone-900 shadow-[0_0_10px_rgba(245,158,11,0.3)] ring-1 ring-amber-500/50' },
 };
 
 export const getTileConfig = (type: TileTypeStr): TileConfig => {
